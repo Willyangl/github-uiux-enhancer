@@ -539,6 +539,56 @@ function enhanceWorkflowNotifications() {
   });
 }
 
+/**
+ * On a workflow run detail page (/actions/runs/{id}), injects a notify button
+ * into the page header so the user can register for completion notification
+ * right after triggering a workflow.
+ */
+function enhanceWorkflowRunDetailPage() {
+  if (!featureToggles.notifications) return;
+
+  // Only run on workflow run detail pages: /owner/repo/actions/runs/12345
+  const parsed = parseWorkflowRunUrl(location.href);
+  if (!parsed) return;
+
+  // Don't add if already present
+  if (document.querySelector('.gh-enhancer-detail-notify')) return;
+
+  // Detect if the run is still in progress (not completed)
+  const pageText = (document.body.textContent || '').toLowerCase();
+  const completedKeywords = ['completed', 'success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
+  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
+  const isCompleted = completedKeywords.some(kw => pageText.includes(kw))
+                   && !runningKeywords.some(kw => pageText.includes(kw));
+
+  // Also show if already watched
+  chrome.storage.local.get('watchedRuns', (data) => {
+    const watched = data.watchedRuns || {};
+    const isWatched = !!watched[parsed.runId];
+
+    if (isCompleted && !isWatched) return;
+    if (document.querySelector('.gh-enhancer-detail-notify')) return;
+
+    const notifyBtn = createNotifyButton(parsed.runId, location.href);
+    notifyBtn.classList.add('gh-enhancer-detail-notify');
+    // Make it more prominent on the detail page
+    notifyBtn.style.cssText = 'font-size:13px;padding:4px 12px;margin-left:8px;';
+
+    // Insert into the page header — look for the heading area
+    const headerCandidates = [
+      'h1', '.PageHeader', '[class*="PageHeader"]',
+      '.gh-header-title', '.js-issue-title',
+    ];
+    for (const sel of headerCandidates) {
+      const header = document.querySelector(sel);
+      if (header) {
+        header.appendChild(notifyBtn);
+        return;
+      }
+    }
+  });
+}
+
 // ─── Completion toast notification (received from background.js) ────────────
 
 /**
@@ -615,6 +665,7 @@ function showCompletionToast(data) {
 function runAllEnhancements() {
   enhanceBranchNames();
   enhanceWorkflowNotifications();
+  enhanceWorkflowRunDetailPage();
 }
 
 const observer = new MutationObserver(() => {
