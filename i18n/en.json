@@ -50,7 +50,7 @@
     "conclusionCancelled": "Cancelled",
     "conclusionTimedOut": "Timed out",
     "conclusionSkipped": "Skipped",
-    "rerun": "Re-run",
+    "rerun": "Run with same params",
     "rerunTitle": "Re-run workflow with the same parameters",
     "rerunning": "Running…",
     "rerunDone": "Dispatched",
