@@ -349,12 +349,23 @@
       </label>
     </div>
 
-    <div class="feature-item">
-      <span class="feature-label">ワークフロー完了時にブラウザ通知</span>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-notifications" checked />
-        <span class="toggle-slider"></span>
-      </label>
+    <div class="feature-group">
+      <div class="feature-item no-border">
+        <span class="feature-label">ワークフロー完了時にブラウザ通知</span>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-notifications" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="feature-item no-border" id="auto-notify-setting" style="padding-top:0">
+        <span class="feature-label" style="font-size:11px;color:#57606a;padding-left:8px">
+          実行中WFを自動的に通知登録する
+        </span>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-autoNotify" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
     </div>
   </div>
 

@@ -12,6 +12,7 @@ const toggleIds = {
   fullBranchName: 'toggle-fullBranchName',
   copyButton: 'toggle-copyButton',
   notifications: 'toggle-notifications',
+  autoNotify: 'toggle-autoNotify',
 };
 const dropdownCharInput = document.getElementById('dropdown-char-count');
 const dropdownCharSetting = document.getElementById('dropdown-char-setting');
@@ -22,6 +23,7 @@ const DEFAULTS = {
     fullBranchName: true,
     copyButton: true,
     notifications: true,
+    autoNotify: false,
   },
   dropdownCharCount: 50,
 };
@@ -54,8 +56,9 @@ chrome.storage.local.get(['githubToken', 'watchedRuns', 'featureToggles', 'dropd
   const charCount = data.dropdownCharCount ?? DEFAULTS.dropdownCharCount;
   if (dropdownCharInput) dropdownCharInput.value = charCount;
 
-  // Show/hide char count setting based on toggle
+  // Show/hide sub-settings based on toggles
   updateDropdownCharVisibility(toggles.widenDropdown);
+  updateAutoNotifyVisibility(toggles.notifications);
 
   renderWatchedRuns(data.watchedRuns || {});
 });
@@ -74,6 +77,9 @@ Object.entries(toggleIds).forEach(([key, id]) => {
       if (key === 'widenDropdown') {
         updateDropdownCharVisibility(el.checked);
       }
+      if (key === 'notifications') {
+        updateAutoNotifyVisibility(el.checked);
+      }
     });
   });
 });
@@ -81,6 +87,13 @@ Object.entries(toggleIds).forEach(([key, id]) => {
 function updateDropdownCharVisibility(enabled) {
   if (dropdownCharSetting) {
     dropdownCharSetting.style.display = enabled ? 'flex' : 'none';
+  }
+}
+
+function updateAutoNotifyVisibility(enabled) {
+  const el = document.getElementById('auto-notify-setting');
+  if (el) {
+    el.style.display = enabled ? 'flex' : 'none';
   }
 }
 

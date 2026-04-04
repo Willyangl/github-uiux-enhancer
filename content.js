@@ -19,6 +19,7 @@ let featureToggles = {
   fullBranchName: true,
   copyButton: true,
   notifications: true,
+  autoNotify: false,
 };
 let dropdownCharCount = 50; // characters visible in dropdown
 
@@ -532,8 +533,9 @@ function enhanceWorkflowNotifications() {
   });
 
   // Check storage for watched runs, then inject buttons
-  chrome.storage.local.get('watchedRuns', (data) => {
+  chrome.storage.local.get(['watchedRuns', 'githubToken'], (data) => {
     const watched = data.watchedRuns || {};
+    let watchedUpdated = false;
 
     allRunRows.forEach(({ row, runUrl, parsed }, runId) => {
       // Skip if already has a notify button (handles DOM re-render)
@@ -542,7 +544,19 @@ function enhanceWorkflowNotifications() {
       const running = isRowRunning(row);
       const isWatched = !!watched[runId];
 
-      if (!running && !isWatched) return;
+      // Auto-register: if enabled and running and not yet watched, register automatically
+      if (featureToggles.autoNotify && running && !isWatched && data.githubToken) {
+        watched[runId] = {
+          owner: parsed.owner,
+          repo: parsed.repo,
+          runId,
+          runUrl,
+          addedAt: Date.now(),
+        };
+        watchedUpdated = true;
+      }
+
+      if (!running && !isWatched && !watched[runId]) return;
 
       const notifyBtn = createNotifyButton(parsed.runId, runUrl);
 
@@ -552,6 +566,12 @@ function enhanceWorkflowNotifications() {
         runLink.insertAdjacentElement('afterend', notifyBtn);
       }
     });
+
+    // Save auto-registered runs and start polling
+    if (watchedUpdated) {
+      chrome.storage.local.set({ watchedRuns: watched });
+      chrome.runtime.sendMessage({ type: 'START_POLLING' });
+    }
   });
 }
 
@@ -577,12 +597,25 @@ function enhanceWorkflowRunDetailPage() {
   const isCompleted = completedKeywords.some(kw => pageText.includes(kw))
                    && !runningKeywords.some(kw => pageText.includes(kw));
 
-  // Also show if already watched
-  chrome.storage.local.get('watchedRuns', (data) => {
+  // Also show if already watched; auto-register if enabled
+  chrome.storage.local.get(['watchedRuns', 'githubToken'], (data) => {
     const watched = data.watchedRuns || {};
     const isWatched = !!watched[parsed.runId];
 
-    if (isCompleted && !isWatched) return;
+    // Auto-register on detail page if enabled and not completed
+    if (featureToggles.autoNotify && !isCompleted && !isWatched && data.githubToken) {
+      watched[parsed.runId] = {
+        owner: parsed.owner,
+        repo: parsed.repo,
+        runId: parsed.runId,
+        runUrl: location.href,
+        addedAt: Date.now(),
+      };
+      chrome.storage.local.set({ watchedRuns: watched });
+      chrome.runtime.sendMessage({ type: 'START_POLLING' });
+    }
+
+    if (isCompleted && !isWatched && !watched[parsed.runId]) return;
     if (document.querySelector('.gh-enhancer-detail-notify')) return;
 
     const notifyBtn = createNotifyButton(parsed.runId, location.href);
