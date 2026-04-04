@@ -92,33 +92,99 @@ function calcDropdownWidth() {
 
 /**
  * Finds branch selector dropdowns and widens them based on the configured
- * character count. Works for repository branch pickers and GitHub Actions
- * "Run workflow" modals.
+ * character count. Supports both legacy SelectMenu and modern Primer
+ * SelectPanel/Overlay (portal-rendered).
  */
 function widenBranchDropdowns() {
   if (!featureToggles.widenDropdown) return;
 
-  const dropdownSelectors = [
+  const width = calcDropdownWidth();
+
+  // --- Legacy selectors (older GitHub UI) ---
+  const legacySelectors = [
     '.branch-select-menu .SelectMenu-modal',
     '.js-branch-select-menu .SelectMenu-modal',
     '[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal',
     'details[open] .SelectMenu-modal',
   ];
 
-  const width = calcDropdownWidth();
-
-  dropdownSelectors.forEach(selector => {
+  legacySelectors.forEach(selector => {
     document.querySelectorAll(selector).forEach(modal => {
-      if (modal.getAttribute(PROCESSED_ATTR) === 'widened') return;
-      modal.style.setProperty('width', `${width}px`, 'important');
-      modal.style.setProperty('max-width', '900px', 'important');
-      modal.setAttribute(PROCESSED_ATTR, 'widened');
+      applyWidth(modal, width);
     });
   });
 
+  // --- Modern Primer SelectPanel / Overlay (portal-rendered) ---
+  // GitHub's branch picker now uses React portals: the overlay is rendered
+  // at the top level of the DOM, not inside the branch button.
+  // We detect it by looking for overlays that contain branch-related content.
+  findBranchOverlays().forEach(overlay => {
+    applyWidth(overlay, width);
+  });
+
+  // Also widen filter inputs inside dropdowns
   document.querySelectorAll('.SelectMenu-filter input').forEach(input => {
     input.style.setProperty('width', '100%', 'important');
   });
+}
+
+/**
+ * Applies width to a modal/overlay element if not already processed.
+ */
+function applyWidth(el, width) {
+  if (el.getAttribute(PROCESSED_ATTR) === 'widened') return;
+  el.style.setProperty('width', `${width}px`, 'important');
+  el.style.setProperty('max-width', '900px', 'important');
+  el.setAttribute(PROCESSED_ATTR, 'widened');
+}
+
+/**
+ * Finds modern Primer-based branch picker overlays.
+ * These are rendered via React portals and can be detected by:
+ *   - Containing "Switch branches/tags" or branch filter text
+ *   - Having [data-target="ref-selector"] or similar data attributes
+ *   - Being an Overlay/dialog near an anchored trigger
+ */
+function findBranchOverlays() {
+  const overlays = [];
+
+  // Strategy 1: Find overlays/dialogs containing branch-related headings
+  const branchKeywords = ['switch branches', 'switch branches/tags', 'choose a branch'];
+  document.querySelectorAll(
+    '[role="dialog"], .Overlay, .Overlay-body, .SelectPanel, ' +
+    '[data-testid="SelectPanel"], [class*="Overlay"]'
+  ).forEach(el => {
+    const text = (el.textContent || '').toLowerCase();
+    if (branchKeywords.some(kw => text.includes(kw))) {
+      // Find the outermost overlay container with a constrained width
+      const container = el.closest('[class*="Overlay"]') || el;
+      overlays.push(container);
+    }
+  });
+
+  // Strategy 2: Find the ref-selector component overlays
+  document.querySelectorAll(
+    'ref-selector, [data-target*="ref-selector"], [data-action*="ref-selector"]'
+  ).forEach(el => {
+    const overlay = el.closest('[class*="Overlay"]') ||
+                    el.closest('[role="dialog"]') ||
+                    el.closest('.SelectMenu-modal') ||
+                    el;
+    overlays.push(overlay);
+  });
+
+  // Strategy 3: Direct class patterns from Primer Overlay
+  document.querySelectorAll(
+    '.Overlay--size-small-portrait, .Overlay--size-medium, ' +
+    '.Overlay--size-auto, [class*="Box--overlay"]'
+  ).forEach(el => {
+    const text = (el.textContent || '').toLowerCase();
+    if (text.includes('branch') || text.includes('tag') || text.includes('find or create')) {
+      overlays.push(el);
+    }
+  });
+
+  return [...new Set(overlays)];
 }
 
 /**
@@ -141,12 +207,24 @@ document.addEventListener('toggle', (e) => {
   }
 }, true);
 
-// Also watch click events on branch selector buttons
+// Watch click events on branch selector buttons (both legacy and modern Primer UI).
+// Modern GitHub uses <button> with branch icon or branch name text for the trigger.
 document.addEventListener('click', (e) => {
   const btn = e.target.closest(
-    'summary[aria-label*="ranch"], .branch-select-menu summary, button[aria-label*="ranch"]'
+    // Legacy selectors
+    'summary[aria-label*="ranch"], .branch-select-menu summary, button[aria-label*="ranch"], ' +
+    // Modern Primer branch picker trigger button
+    '[data-hotkey="w"], #branch-picker-repos-header-ref-selector, ' +
+    'button[id*="branch"], button[id*="ref-selector"], ' +
+    '[class*="BranchName"], [class*="branch-name"]'
   );
-  if (btn) setTimeout(widenBranchDropdowns, 100);
+  if (btn) {
+    // The Primer overlay renders asynchronously via React portal,
+    // so we retry a few times with increasing delays.
+    setTimeout(widenBranchDropdowns, 100);
+    setTimeout(widenBranchDropdowns, 300);
+    setTimeout(widenBranchDropdowns, 600);
+  }
 }, true);
 
 // ─── Feature 2 & 3: Full branch names + copy buttons ─────────────────────────
@@ -401,6 +479,9 @@ function runAllEnhancements() {
 
 const observer = new MutationObserver(() => {
   runAllEnhancements();
+  // Also check for branch dropdowns — Primer overlays are rendered via portals
+  // and appear as new DOM nodes, so MutationObserver is the right place to catch them.
+  widenBranchDropdowns();
 });
 
 observer.observe(document.body, {

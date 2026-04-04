@@ -10,6 +10,20 @@
   overflow-y: auto;
 }
 
+/*
+ * Modern Primer SelectPanel overlay — prevent truncation of branch names
+ * inside the overlay list items so that long branch names are visible.
+ * The actual overlay width is set dynamically by content.js.
+ */
+[data-gh-enhancer="widened"] .ActionListItem-label,
+[data-gh-enhancer="widened"] .ActionListItem-description,
+[data-gh-enhancer="widened"] li span {
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: nowrap !important;
+  max-width: none !important;
+}
+
 /* =====================================================
    Feature 2: Show full branch names in workflow list
    ===================================================== */
