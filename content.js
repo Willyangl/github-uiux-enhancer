@@ -678,7 +678,8 @@ function enhanceWorkflowRunDetailPage() {
       safeSendMessage({ type: 'START_POLLING' });
     }
 
-    if (isCompleted && !isWatched && !watched[parsed.runId]) return;
+    // Don't show button on completed workflows
+    if (isCompleted) return;
     if (document.querySelector('.gh-enhancer-detail-notify')) return;
 
     const notifyBtn = createNotifyButton(parsed.runId, location.href);
