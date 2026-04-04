@@ -77,6 +77,8 @@ async function pollWatchedRuns() {
         // status values: queued | in_progress | completed
         if (status === 'completed') {
           completed.push(run.runId);
+          // Save URL before removing from watchedRuns so notification click can open it
+          await saveNotificationUrl(run.runId, run.runUrl);
           showNotification(run, name, head_branch, conclusion);
           notifyContentScripts(run, name, head_branch, conclusion);
         }
@@ -154,15 +156,27 @@ async function notifyContentScripts(run, workflowName, branchName, conclusion) {
   }
 }
 
-// Open the workflow run page when browser notification is clicked
+/**
+ * Saves a run URL so it can be opened when the OS notification is clicked.
+ */
+async function saveNotificationUrl(runId, url) {
+  const data = await chrome.storage.local.get('notificationUrls');
+  const urls = data.notificationUrls || {};
+  urls[runId] = url;
+  await chrome.storage.local.set({ notificationUrls: urls });
+}
+
+// Open the workflow run page when OS notification is clicked
 chrome.notifications.onClicked.addListener((notificationId) => {
   const runId = notificationId.replace('run-', '');
-  chrome.storage.local.get('watchedRuns', (data) => {
-    // Try to find URL from the run ID in recently completed or current watched runs
-    const watched = data.watchedRuns || {};
-    const run = watched[runId];
-    if (run && run.runUrl) {
-      chrome.tabs.create({ url: run.runUrl });
+  chrome.storage.local.get('notificationUrls', (data) => {
+    const urls = data.notificationUrls || {};
+    const url = urls[runId];
+    if (url) {
+      chrome.tabs.create({ url });
+      // Clean up
+      delete urls[runId];
+      chrome.storage.local.set({ notificationUrls: urls });
     }
   });
   chrome.notifications.clear(notificationId);
