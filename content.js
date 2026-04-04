@@ -461,42 +461,129 @@ function createNotifyButton(runId, runUrl) {
 }
 
 /**
- * Finds running workflow rows and injects a "Notify me" button.
+ * Finds workflow rows and injects "Notify me" buttons.
+ *
+ * Two modes:
+ *   1. Running rows (detected by status indicators) — show "通知" button
+ *   2. Rows whose run ID is in watchedRuns storage — show "通知中" button
+ *      (persists across page reloads until the workflow completes)
  */
 function enhanceWorkflowNotifications() {
   if (!isActionsPage()) return;
   if (!featureToggles.notifications) return;
 
-  const runningRows = new Set();
-
-  RUNNING_ROW_SELECTORS.forEach(sel => {
-    document.querySelectorAll(sel).forEach(indicator => {
-      let row = indicator.closest('[data-run-id], li, tr, .Box-row, article');
-      if (row) runningRows.add(row);
-    });
-  });
-
-  runningRows.forEach(row => {
-    if (row.getAttribute(PROCESSED_ATTR + '-notify')) return;
-    row.setAttribute(PROCESSED_ATTR + '-notify', 'true');
-
-    const runLink = row.querySelector('a[href*="/actions/runs/"]');
-    if (!runLink) return;
-
-    const runUrl = runLink.href;
-    const parsed = parseWorkflowRunUrl(runUrl);
+  // Gather all rows that have workflow run links
+  const allRunRows = new Map(); // runId → row element
+  document.querySelectorAll('a[href*="/actions/runs/"]').forEach(link => {
+    const parsed = parseWorkflowRunUrl(link.href);
     if (!parsed) return;
-
-    const notifyBtn = createNotifyButton(parsed.runId, runUrl);
-
-    const statusIndicator = row.querySelector(RUNNING_ROW_SELECTORS.join(','));
-    if (statusIndicator) {
-      statusIndicator.closest('span, div, td')?.insertAdjacentElement('afterend', notifyBtn)
-        ?? statusIndicator.insertAdjacentElement('afterend', notifyBtn);
-    } else {
-      runLink.insertAdjacentElement('afterend', notifyBtn);
+    const row = link.closest('[data-run-id], li, tr, .Box-row, article');
+    if (row && !allRunRows.has(parsed.runId)) {
+      allRunRows.set(parsed.runId, { row, runUrl: link.href, parsed });
     }
   });
+
+  // Check storage for watched runs, then inject buttons
+  chrome.storage.local.get('watchedRuns', (data) => {
+    const watched = data.watchedRuns || {};
+
+    allRunRows.forEach(({ row, runUrl, parsed }, runId) => {
+      if (row.getAttribute(PROCESSED_ATTR + '-notify')) return;
+
+      // Determine if this row should get a notify button:
+      // - It is currently running (status indicator present), OR
+      // - Its run ID is in the watched list (user previously clicked "通知")
+      const isRunning = !!row.querySelector(RUNNING_ROW_SELECTORS.join(','));
+      const isWatched = !!watched[runId];
+
+      if (!isRunning && !isWatched) return;
+
+      row.setAttribute(PROCESSED_ATTR + '-notify', 'true');
+
+      const notifyBtn = createNotifyButton(parsed.runId, runUrl);
+
+      // Insert button — try after status indicator, then after run link
+      const statusIndicator = row.querySelector(RUNNING_ROW_SELECTORS.join(','));
+      const runLink = row.querySelector('a[href*="/actions/runs/"]');
+      if (statusIndicator) {
+        statusIndicator.closest('span, div, td')?.insertAdjacentElement('afterend', notifyBtn)
+          ?? statusIndicator.insertAdjacentElement('afterend', notifyBtn);
+      } else if (runLink) {
+        runLink.insertAdjacentElement('afterend', notifyBtn);
+      }
+    });
+  });
+}
+
+// ─── Completion toast notification (received from background.js) ────────────
+
+/**
+ * Listens for WORKFLOW_COMPLETED messages from the background script
+ * and shows an in-page toast notification.
+ */
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'WORKFLOW_COMPLETED') {
+    showCompletionToast(message.data);
+  }
+});
+
+/**
+ * Shows a toast notification in the bottom-right corner of the page
+ * when a watched workflow completes.
+ */
+function showCompletionToast(data) {
+  const { workflowName, branchName, conclusion, runUrl, owner, repo } = data;
+
+  // Ensure toast container exists
+  let container = document.getElementById('gh-enhancer-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'gh-enhancer-toast-container';
+    document.body.appendChild(container);
+  }
+
+  const isSuccess = conclusion === 'success';
+  const isCancelled = conclusion === 'cancelled';
+  const icon = isSuccess ? '✅' : isCancelled ? '⚠️' : '❌';
+  const conclusionLabel = {
+    success: '成功', failure: '失敗', cancelled: 'キャンセル',
+    timed_out: 'タイムアウト', skipped: 'スキップ',
+  }[conclusion] ?? conclusion;
+
+  const statusClass = isSuccess ? 'success' : isCancelled ? 'warning' : 'error';
+
+  const toast = document.createElement('div');
+  toast.className = `gh-enhancer-toast gh-enhancer-toast-${statusClass}`;
+  toast.innerHTML = `
+    <div class="gh-enhancer-toast-header">
+      <span class="gh-enhancer-toast-icon">${icon}</span>
+      <strong class="gh-enhancer-toast-title">ワークフロー完了</strong>
+      <button class="gh-enhancer-toast-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="gh-enhancer-toast-body">
+      <div class="gh-enhancer-toast-workflow">${workflowName ?? 'Workflow'}</div>
+      ${branchName ? `<div class="gh-enhancer-toast-branch">ブランチ: ${branchName}</div>` : ''}
+      <div class="gh-enhancer-toast-result">結果: ${conclusionLabel}</div>
+      <div class="gh-enhancer-toast-repo">${owner}/${repo}</div>
+    </div>
+    <a class="gh-enhancer-toast-link" href="${runUrl}" target="_blank">詳細を見る →</a>
+  `;
+
+  // Close button
+  toast.querySelector('.gh-enhancer-toast-close').addEventListener('click', () => {
+    toast.classList.add('gh-enhancer-toast-hide');
+    toast.addEventListener('transitionend', () => toast.remove());
+  });
+
+  container.appendChild(toast);
+
+  // Auto-dismiss after 15 seconds
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.classList.add('gh-enhancer-toast-hide');
+      toast.addEventListener('transitionend', () => toast.remove());
+    }
+  }, 15000);
 }
 
 // ─── MutationObserver: re-run on DOM changes (GitHub SPA) ────────────────────
