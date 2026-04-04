@@ -49,11 +49,6 @@
     "conclusionFailure": "Failure",
     "conclusionCancelled": "Cancelled",
     "conclusionTimedOut": "Timed out",
-    "conclusionSkipped": "Skipped",
-    "rerun": "Run with same params",
-    "rerunTitle": "Re-run workflow with the same parameters",
-    "rerunning": "Running…",
-    "rerunDone": "Dispatched",
-    "rerunFailed": "Failed"
+    "conclusionSkipped": "Skipped"
   }
 }

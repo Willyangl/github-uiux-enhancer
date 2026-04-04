@@ -49,11 +49,6 @@
     "conclusionFailure": "失敗",
     "conclusionCancelled": "キャンセル",
     "conclusionTimedOut": "タイムアウト",
-    "conclusionSkipped": "スキップ",
-    "rerun": "同条件で実行",
-    "rerunTitle": "同じパラメータでワークフローを再実行",
-    "rerunning": "実行中…",
-    "rerunDone": "実行しました",
-    "rerunFailed": "実行失敗"
+    "conclusionSkipped": "スキップ"
   }
 }

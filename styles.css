@@ -172,55 +172,6 @@
 }
 
 /* =====================================================
-   Feature 5: Re-run button styles
-   ===================================================== */
-
-.gh-enhancer-rerun-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
-  line-height: 1;
-  color: #57606a;
-  background-color: transparent;
-  border: 1px solid #d0d7de;
-  border-radius: 4px;
-  cursor: pointer;
-  vertical-align: middle;
-  opacity: 0.7;
-  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
-  white-space: nowrap;
-}
-
-.gh-enhancer-rerun-btn:hover {
-  opacity: 1;
-  background-color: #ddf4ff;
-  color: #0969da;
-  border-color: #0969da;
-}
-
-.gh-enhancer-rerun-btn:disabled {
-  cursor: wait;
-  opacity: 0.6;
-}
-
-.gh-enhancer-rerun-btn.rerun-success {
-  color: #1a7f37;
-  border-color: #1a7f37;
-  background-color: #dafbe1;
-  opacity: 1;
-}
-
-.gh-enhancer-rerun-btn.rerun-error {
-  color: #cf222e;
-  border-color: #cf222e;
-  background-color: #fff1f0;
-  opacity: 1;
-}
-
-/* =====================================================
    Completion toast notification
    ===================================================== */
 
