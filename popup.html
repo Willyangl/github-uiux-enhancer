@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Enhancer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: #24292f;
+      background: #ffffff;
+      width: 320px;
+      padding: 0;
+    }
+
+    .header {
+      background: #24292f;
+      color: #fff;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header svg {
+      flex-shrink: 0;
+    }
+
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #d0d7de;
+    }
+
+    .section:last-child {
+      border-bottom: none;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #57606a;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #24292f;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #57606a;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+
+    .hint a {
+      color: #0969da;
+      text-decoration: none;
+    }
+
+    .hint a:hover {
+      text-decoration: underline;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    input[type="password"],
+    input[type="text"] {
+      flex: 1;
+      padding: 5px 8px;
+      font-size: 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      outline: none;
+      color: #24292f;
+      background: #f6f8fa;
+    }
+
+    input[type="password"]:focus,
+    input[type="text"]:focus {
+      border-color: #0969da;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1);
+    }
+
+    button {
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid;
+      transition: background 0.1s;
+    }
+
+    .btn-primary {
+      background: #1a7f37;
+      color: #fff;
+      border-color: #1a7f37;
+    }
+
+    .btn-primary:hover {
+      background: #116329;
+    }
+
+    .btn-danger {
+      background: #fff;
+      color: #cf222e;
+      border-color: #d0d7de;
+    }
+
+    .btn-danger:hover {
+      background: #fff1f0;
+      border-color: #cf222e;
+    }
+
+    .status-msg {
+      font-size: 11px;
+      margin-top: 6px;
+      height: 14px;
+    }
+
+    .status-msg.success { color: #1a7f37; }
+    .status-msg.error   { color: #cf222e; }
+
+    .feature-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #24292f;
+    }
+
+    .feature-list li::before {
+      content: "✓";
+      color: #1a7f37;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    .watched-runs {
+      margin-top: 6px;
+    }
+
+    .watched-run-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 11px;
+      border-bottom: 1px solid #f6f8fa;
+    }
+
+    .watched-run-item:last-child {
+      border-bottom: none;
+    }
+
+    .watched-run-link {
+      color: #0969da;
+      text-decoration: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .watched-run-link:hover {
+      text-decoration: underline;
+    }
+
+    .empty-msg {
+      font-size: 11px;
+      color: #57606a;
+      font-style: italic;
+    }
+
+    .token-set-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #1a7f37;
+      margin-bottom: 8px;
+    }
+
+    .token-not-set-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #9a6700;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="white" aria-hidden="true">
+      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+    </svg>
+    <h1>GitHub Enhancer</h1>
+  </div>
+
+  <!-- Features overview -->
+  <div class="section">
+    <div class="section-title">有効な機能</div>
+    <ul class="feature-list">
+      <li>ブランチ選択プルダウンの幅を1.7倍に拡大</li>
+      <li>Actionsワークフロー履歴のブランチ名を全表示</li>
+      <li>ブランチ名横にコピーボタンを表示</li>
+      <li>ワークフロー完了時にブラウザ通知</li>
+    </ul>
+  </div>
+
+  <!-- GitHub Token settings -->
+  <div class="section">
+    <div class="section-title">設定</div>
+    <div id="token-status"></div>
+    <label for="token-input">GitHub Personal Access Token</label>
+    <p class="hint">
+      ワークフロー完了通知に必要です。<br>
+      <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub+Enhancer" target="_blank">
+        トークンを発行する（repo スコープが必要）
+      </a>
+    </p>
+    <div class="input-row">
+      <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" />
+      <button class="btn-primary" id="save-token-btn">保存</button>
+    </div>
+    <div class="status-msg" id="token-status-msg"></div>
+  </div>
+
+  <!-- Watched runs -->
+  <div class="section">
+    <div class="section-title">通知待ちワークフロー</div>
+    <div id="watched-runs-list" class="watched-runs">
+      <p class="empty-msg">通知待ちのワークフローはありません</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

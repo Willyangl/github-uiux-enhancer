@@ -1,0 +1,132 @@
+/* =====================================================
+   Feature 1: Widen branch dropdowns (1.7x)
+   Applies to repository pages and GitHub Actions
+   ===================================================== */
+
+/* Branch selector dropdown panel */
+.SelectMenu,
+.SelectMenu-modal,
+details[data-target*="branch"] .SelectMenu,
+details[data-target*="branch"] .SelectMenu-modal {
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+/* Branch filter input inside dropdown */
+.branch-select-menu .SelectMenu-modal,
+.branch-select-menu .SelectMenu-list,
+[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal {
+  width: calc(var(--original-width, 240px) * 1.7) !important;
+  max-width: 600px !important;
+}
+
+/* GitHub Actions "Run workflow" branch selector */
+[data-target*="branch"] .SelectMenu-modal,
+.js-branch-select-menu .SelectMenu-modal,
+summary[aria-label*="branch"] + .SelectMenu .SelectMenu-modal,
+summary[aria-label*="Branch"] + .SelectMenu .SelectMenu-modal {
+  width: calc(240px * 1.7) !important;
+  max-width: 600px !important;
+}
+
+/* General branch-related Select menus */
+.SelectMenu-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* =====================================================
+   Feature 2: Show full branch names in workflow list
+   ===================================================== */
+
+/* Prevent truncation of branch name links in Actions workflow runs */
+.gh-enhancer-branch-name {
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: nowrap !important;
+  max-width: none !important;
+  display: inline !important;
+}
+
+/* Container of branch name may also truncate */
+.gh-enhancer-branch-cell {
+  overflow: visible !important;
+  max-width: none !important;
+  white-space: nowrap !important;
+}
+
+/* =====================================================
+   Feature 3: Copy button styles
+   ===================================================== */
+
+.gh-enhancer-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 1px 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: #57606a;
+  background-color: transparent;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  cursor: pointer;
+  vertical-align: middle;
+  opacity: 0.6;
+  transition: opacity 0.15s, background-color 0.15s;
+  text-decoration: none !important;
+}
+
+.gh-enhancer-copy-btn:hover {
+  opacity: 1;
+  background-color: #f6f8fa;
+  color: #24292f;
+}
+
+.gh-enhancer-copy-btn.copied {
+  color: #1a7f37;
+  border-color: #1a7f37;
+  opacity: 1;
+}
+
+/* =====================================================
+   Feature 4: Notify button styles
+   ===================================================== */
+
+.gh-enhancer-notify-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1;
+  color: #57606a;
+  background-color: transparent;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  cursor: pointer;
+  vertical-align: middle;
+  opacity: 0.7;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.gh-enhancer-notify-btn:hover {
+  opacity: 1;
+  background-color: #ddf4ff;
+  color: #0969da;
+  border-color: #0969da;
+}
+
+.gh-enhancer-notify-btn.active {
+  color: #0969da;
+  border-color: #0969da;
+  background-color: #ddf4ff;
+  opacity: 1;
+}
+
+.gh-enhancer-notify-btn.active:hover {
+  background-color: #b6e3ff;
+}

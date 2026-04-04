@@ -1,0 +1,365 @@
+/**
+ * GitHub Enhancer - Content Script
+ *
+ * Feature 1: Widen branch dropdowns (1.7x) on all GitHub pages
+ * Feature 2: Show full branch names in GitHub Actions workflow list
+ * Feature 3: Copy button next to branch names in workflow list
+ * Feature 4: Notify button to receive browser notification on workflow completion
+ */
+
+'use strict';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DROPDOWN_SCALE = 1.7;
+const PROCESSED_ATTR = 'data-gh-enhancer';
+
+// Selectors for branch name elements in Actions workflow run rows.
+// GitHub's markup may vary; we try several patterns.
+const BRANCH_LINK_SELECTORS = [
+  // Workflow runs list page (branch column link)
+  'a.branch-name',
+  'span.branch-name',
+  '[data-component="branch-name"]',
+  // Workflow run rows — branch info near git-branch icon
+  '.WorkflowRunBranch a',
+  '.workflow-run__branch a',
+  // Generic: links immediately after an octicon-git-branch svg
+  'svg.octicon-git-branch ~ a',
+  'svg.octicon-git-branch + span a',
+  // Table cell containing branch name
+  'td .branch-name',
+  // Newer GitHub UI patterns
+  '[data-testid="workflow-run-branch"] a',
+  '[data-testid="workflow-run-branch"] span',
+];
+
+// Selectors to identify running workflow rows
+const RUNNING_ROW_SELECTORS = [
+  // Status indicators for queued / in_progress
+  '[aria-label="In progress"]',
+  '[aria-label="Queued"]',
+  'svg.octicon-dot-fill',             // yellow spinner indicator
+  '.workflow-run-status--in_progress',
+  '[data-testid="workflow-run-status-in-progress"]',
+];
+
+// ─── Feature 1: Widen branch dropdowns ────────────────────────────────────────
+
+/**
+ * Finds branch selector dropdowns and widens them to 1.7× their natural width.
+ * Works for repository branch pickers and GitHub Actions "Run workflow" modals.
+ */
+function widenBranchDropdowns() {
+  // Candidate dropdown modals
+  const dropdownSelectors = [
+    '.branch-select-menu .SelectMenu-modal',
+    '.js-branch-select-menu .SelectMenu-modal',
+    '[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal',
+    // Actions "Run workflow" branch picker
+    'details[open] .SelectMenu-modal',
+  ];
+
+  dropdownSelectors.forEach(selector => {
+    document.querySelectorAll(selector).forEach(modal => {
+      if (modal.getAttribute(PROCESSED_ATTR) === 'widened') return;
+      const natural = modal.getBoundingClientRect().width || 240;
+      const newWidth = Math.min(Math.round(natural * DROPDOWN_SCALE), 680);
+      modal.style.setProperty('width', `${newWidth}px`, 'important');
+      modal.style.setProperty('max-width', '680px', 'important');
+      modal.setAttribute(PROCESSED_ATTR, 'widened');
+    });
+  });
+
+  // Also handle branch filter inputs inside dropdowns
+  document.querySelectorAll('.SelectMenu-filter input').forEach(input => {
+    input.style.setProperty('width', '100%', 'important');
+  });
+}
+
+// Watch for dropdowns being opened (details element toggles)
+document.addEventListener('toggle', (e) => {
+  if (e.target && e.target.tagName === 'DETAILS') {
+    setTimeout(widenBranchDropdowns, 50);
+  }
+}, true);
+
+// Also watch click events on branch selector buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest(
+    'summary[aria-label*="ranch"], .branch-select-menu summary, button[aria-label*="ranch"]'
+  );
+  if (btn) setTimeout(widenBranchDropdowns, 100);
+}, true);
+
+// ─── Feature 2 & 3: Full branch names + copy buttons ─────────────────────────
+
+/**
+ * Returns true if the current page is a GitHub Actions runs list page.
+ */
+function isActionsPage() {
+  return /\/actions(\/workflows\/[^/]+)?(\?|$)/.test(location.pathname) ||
+         location.pathname.includes('/actions');
+}
+
+/**
+ * Extracts the branch name text from an element, stripping leading/trailing whitespace.
+ */
+function getBranchText(el) {
+  return (el.textContent || el.innerText || '').trim();
+}
+
+/**
+ * Creates a copy button for a given branch name.
+ */
+function createCopyButton(branchName) {
+  const btn = document.createElement('button');
+  btn.className = 'gh-enhancer-copy-btn';
+  btn.title = `Copy branch name: ${branchName}`;
+  btn.setAttribute('aria-label', `Copy branch name ${branchName}`);
+  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+    <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+  </svg>`;
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(branchName);
+      btn.classList.add('copied');
+      btn.title = 'Copied!';
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+      </svg>`;
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.title = `Copy branch name: ${branchName}`;
+        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+          <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+        </svg>`;
+      }, 2000);
+    } catch {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = branchName;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 2000);
+    }
+  });
+
+  return btn;
+}
+
+/**
+ * Finds branch name elements in the Actions workflow runs list,
+ * removes truncation CSS, and adds a copy button.
+ */
+function enhanceBranchNames() {
+  if (!isActionsPage()) return;
+
+  // Try each selector pattern
+  const found = new Set();
+  BRANCH_LINK_SELECTORS.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => found.add(el));
+  });
+
+  // Fallback: find all elements adjacent to git-branch octicon SVGs
+  document.querySelectorAll('svg.octicon-git-branch').forEach(svg => {
+    // Look at next siblings and parent's next siblings
+    let sibling = svg.nextElementSibling;
+    while (sibling) {
+      const a = sibling.tagName === 'A' ? sibling : sibling.querySelector('a');
+      if (a) { found.add(a); break; }
+      sibling = sibling.nextElementSibling;
+    }
+    // Also check parent's children
+    const parent = svg.parentElement;
+    if (parent) {
+      parent.querySelectorAll('a, span').forEach(el => {
+        if (el.textContent.trim().length > 0 && !el.querySelector('svg')) {
+          found.add(el);
+        }
+      });
+    }
+  });
+
+  found.forEach(el => {
+    if (el.getAttribute(PROCESSED_ATTR)) return;
+    el.setAttribute(PROCESSED_ATTR, 'branch-enhanced');
+
+    const branchName = getBranchText(el);
+    if (!branchName) return;
+
+    // Feature 2: Remove truncation
+    el.classList.add('gh-enhancer-branch-name');
+
+    // Feature 3: Add copy button after the element
+    const copyBtn = createCopyButton(branchName);
+    if (el.parentElement && !el.parentElement.querySelector('.gh-enhancer-copy-btn')) {
+      el.insertAdjacentElement('afterend', copyBtn);
+    }
+  });
+}
+
+// ─── Feature 4: Workflow completion notifications ─────────────────────────────
+
+/**
+ * Parses the current GitHub page URL to extract owner, repo, and run ID.
+ * Returns null if not on a valid Actions run page.
+ */
+function parseWorkflowRunUrl(url) {
+  // https://github.com/{owner}/{repo}/actions/runs/{runId}
+  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2], runId: m[3] };
+}
+
+/**
+ * Creates a "Notify me" button for a running workflow row.
+ */
+function createNotifyButton(runId, runUrl) {
+  const btn = document.createElement('button');
+  btn.className = 'gh-enhancer-notify-btn';
+  btn.dataset.runId = runId;
+  btn.title = 'Notify me when this workflow completes';
+
+  const bellIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
+    <path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Zm5-3.5A3.5 3.5 0 0 0 4.5 5v2.947c0 .346-.102.683-.294.97l-1.703 2.556a.017.017 0 0 0-.003.01l.001.006c0 .002.002.004.004.006l.006.004.007.001h10.964l.007-.001.006-.004.004-.006.001-.007a.017.017 0 0 0-.003-.01l-1.703-2.554a1.745 1.745 0 0 1-.294-.97V5A3.5 3.5 0 0 0 8 1.5Z"/>
+  </svg>`;
+
+  btn.innerHTML = `${bellIcon}通知`;
+
+  // Check if already watching this run
+  chrome.storage.local.get('watchedRuns', (data) => {
+    const watched = data.watchedRuns || {};
+    if (watched[runId]) {
+      btn.classList.add('active');
+      btn.title = 'Watching — will notify when complete (click to cancel)';
+      btn.innerHTML = `${bellIcon}通知中`;
+    }
+  });
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const data = await new Promise(resolve => chrome.storage.local.get('watchedRuns', resolve));
+    const watched = data.watchedRuns || {};
+
+    if (watched[runId]) {
+      // Cancel notification
+      delete watched[runId];
+      await new Promise(resolve => chrome.storage.local.set({ watchedRuns: watched }, resolve));
+      btn.classList.remove('active');
+      btn.title = 'Notify me when this workflow completes';
+      btn.innerHTML = `${bellIcon}通知`;
+    } else {
+      // Check for token
+      const tokenData = await new Promise(resolve => chrome.storage.local.get('githubToken', resolve));
+      if (!tokenData.githubToken) {
+        alert('GitHub Enhancer: GitHub Personal Access Tokenを設定してください。\n拡張機能アイコンをクリックして設定画面を開いてください。');
+        return;
+      }
+
+      const parsed = parseWorkflowRunUrl(runUrl);
+      if (!parsed) {
+        alert('GitHub Enhancer: このページのワークフロー情報を取得できませんでした。');
+        return;
+      }
+
+      watched[runId] = {
+        owner: parsed.owner,
+        repo: parsed.repo,
+        runId,
+        runUrl,
+        addedAt: Date.now(),
+      };
+      await new Promise(resolve => chrome.storage.local.set({ watchedRuns: watched }, resolve));
+
+      // Tell background to start polling
+      chrome.runtime.sendMessage({ type: 'START_POLLING' });
+
+      btn.classList.add('active');
+      btn.title = 'Watching — will notify when complete (click to cancel)';
+      btn.innerHTML = `${bellIcon}通知中`;
+    }
+  });
+
+  return btn;
+}
+
+/**
+ * Finds running workflow rows and injects a "Notify me" button.
+ */
+function enhanceWorkflowNotifications() {
+  if (!isActionsPage()) return;
+
+  // Find rows that contain an in-progress status indicator
+  const runningRows = new Set();
+
+  RUNNING_ROW_SELECTORS.forEach(sel => {
+    document.querySelectorAll(sel).forEach(indicator => {
+      // Walk up to find the row container (Box-row, li, tr, etc.)
+      let row = indicator.closest('[data-run-id], li, tr, .Box-row, article');
+      if (row) runningRows.add(row);
+    });
+  });
+
+  runningRows.forEach(row => {
+    if (row.getAttribute(PROCESSED_ATTR + '-notify')) return;
+    row.setAttribute(PROCESSED_ATTR + '-notify', 'true');
+
+    // Find the run link to get the run URL and ID
+    const runLink = row.querySelector('a[href*="/actions/runs/"]');
+    if (!runLink) return;
+
+    const runUrl = runLink.href;
+    const parsed = parseWorkflowRunUrl(runUrl);
+    if (!parsed) return;
+
+    const notifyBtn = createNotifyButton(parsed.runId, runUrl);
+
+    // Insert notify button near the status or run title
+    const statusIndicator = row.querySelector(RUNNING_ROW_SELECTORS.join(','));
+    if (statusIndicator) {
+      statusIndicator.closest('span, div, td')?.insertAdjacentElement('afterend', notifyBtn)
+        ?? statusIndicator.insertAdjacentElement('afterend', notifyBtn);
+    } else {
+      // Fallback: insert after the run link
+      runLink.insertAdjacentElement('afterend', notifyBtn);
+    }
+  });
+}
+
+// ─── MutationObserver: re-run on DOM changes (GitHub SPA) ────────────────────
+
+function runAllEnhancements() {
+  enhanceBranchNames();
+  enhanceWorkflowNotifications();
+}
+
+const observer = new MutationObserver(() => {
+  runAllEnhancements();
+});
+
+observer.observe(document.body, {
+  childList: true,
+  subtree: true,
+});
+
+// GitHub uses Turbo navigation (SPA); re-run on page changes
+document.addEventListener('turbo:load', runAllEnhancements);
+document.addEventListener('turbo:render', runAllEnhancements);
+document.addEventListener('pjax:end', runAllEnhancements);
+
+// Initial run
+runAllEnhancements();
+widenBranchDropdowns();
