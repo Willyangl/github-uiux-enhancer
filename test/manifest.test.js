@@ -36,6 +36,7 @@ describe('manifest.json', () => {
     expect(manifest.permissions).toContain('storage');
     expect(manifest.permissions).toContain('notifications');
     expect(manifest.permissions).toContain('alarms');
+    expect(manifest.permissions).toContain('clipboardWrite');
   });
 
   test('TC-MF-05: has host_permissions for github.com and api.github.com', () => {

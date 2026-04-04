@@ -3,7 +3,7 @@
   "name": "GitHub Enhancer",
   "version": "1.0.0",
   "description": "Enhances GitHub UX: wider branch dropdowns, full branch names in Actions, copy buttons, and workflow completion notifications.",
-  "permissions": ["storage", "notifications", "alarms"],
+  "permissions": ["storage", "notifications", "alarms", "clipboardWrite"],
   "host_permissions": [
     "https://github.com/*",
     "https://api.github.com/*"
