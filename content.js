@@ -1,7 +1,7 @@
 /**
  * GitHub Enhancer - Content Script
  *
- * Feature 1: Widen branch dropdowns (1.7x) on all GitHub pages
+ * Feature 1: Widen branch dropdowns (configurable by character count)
  * Feature 2: Show full branch names in GitHub Actions workflow list
  * Feature 3: Copy button next to branch names in workflow list
  * Feature 4: Notify button to receive browser notification on workflow completion
@@ -9,71 +9,128 @@
 
 'use strict';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants & State ────────────────────────────────────────────────────────
 
-const DROPDOWN_SCALE = 1.7;
 const PROCESSED_ATTR = 'data-gh-enhancer';
 
+// Default settings — overridden by chrome.storage values
+let featureToggles = {
+  widenDropdown: true,
+  fullBranchName: true,
+  copyButton: true,
+  notifications: true,
+};
+let dropdownCharCount = 50; // characters visible in dropdown
+
 // Selectors for branch name elements in Actions workflow run rows.
-// GitHub's markup may vary; we try several patterns.
 const BRANCH_LINK_SELECTORS = [
-  // Workflow runs list page (branch column link)
   'a.branch-name',
   'span.branch-name',
   '[data-component="branch-name"]',
-  // Workflow run rows — branch info near git-branch icon
   '.WorkflowRunBranch a',
   '.workflow-run__branch a',
-  // Generic: links immediately after an octicon-git-branch svg
   'svg.octicon-git-branch ~ a',
   'svg.octicon-git-branch + span a',
-  // Table cell containing branch name
   'td .branch-name',
-  // Newer GitHub UI patterns
   '[data-testid="workflow-run-branch"] a',
   '[data-testid="workflow-run-branch"] span',
 ];
 
 // Selectors to identify running workflow rows
 const RUNNING_ROW_SELECTORS = [
-  // Status indicators for queued / in_progress
   '[aria-label="In progress"]',
   '[aria-label="Queued"]',
-  'svg.octicon-dot-fill',             // yellow spinner indicator
+  'svg.octicon-dot-fill',
   '.workflow-run-status--in_progress',
   '[data-testid="workflow-run-status-in-progress"]',
 ];
 
+// ─── Settings loader ──────────────────────────────────────────────────────────
+
+function loadSettings(callback) {
+  chrome.storage.local.get(['featureToggles', 'dropdownCharCount'], (data) => {
+    if (data.featureToggles) {
+      featureToggles = { ...featureToggles, ...data.featureToggles };
+    }
+    if (data.dropdownCharCount != null) {
+      dropdownCharCount = data.dropdownCharCount;
+    }
+    if (callback) callback();
+  });
+}
+
+// React to settings changes from popup in real-time
+chrome.storage.onChanged.addListener((changes) => {
+  let needsRerun = false;
+
+  if (changes.featureToggles) {
+    featureToggles = { ...featureToggles, ...changes.featureToggles.newValue };
+    needsRerun = true;
+  }
+  if (changes.dropdownCharCount) {
+    dropdownCharCount = changes.dropdownCharCount.newValue;
+    needsRerun = true;
+  }
+
+  if (needsRerun) {
+    // Re-apply dropdown widths if char count changed
+    reapplyDropdownWidths();
+    runAllEnhancements();
+  }
+});
+
 // ─── Feature 1: Widen branch dropdowns ────────────────────────────────────────
 
 /**
- * Finds branch selector dropdowns and widens them to 1.7× their natural width.
- * Works for repository branch pickers and GitHub Actions "Run workflow" modals.
+ * Calculates the dropdown width in px from the character count.
+ * Uses approximately 7.5px per character (GitHub's monospace-ish font).
+ * Adds padding for the dropdown chrome (icon + padding ~40px).
+ */
+function calcDropdownWidth() {
+  return Math.round(dropdownCharCount * 7.5) + 40;
+}
+
+/**
+ * Finds branch selector dropdowns and widens them based on the configured
+ * character count. Works for repository branch pickers and GitHub Actions
+ * "Run workflow" modals.
  */
 function widenBranchDropdowns() {
-  // Candidate dropdown modals
+  if (!featureToggles.widenDropdown) return;
+
   const dropdownSelectors = [
     '.branch-select-menu .SelectMenu-modal',
     '.js-branch-select-menu .SelectMenu-modal',
     '[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal',
-    // Actions "Run workflow" branch picker
     'details[open] .SelectMenu-modal',
   ];
+
+  const width = calcDropdownWidth();
 
   dropdownSelectors.forEach(selector => {
     document.querySelectorAll(selector).forEach(modal => {
       if (modal.getAttribute(PROCESSED_ATTR) === 'widened') return;
-      const natural = modal.getBoundingClientRect().width || 240;
-      const newWidth = Math.min(Math.round(natural * DROPDOWN_SCALE), 680);
-      modal.style.setProperty('width', `${newWidth}px`, 'important');
-      modal.style.setProperty('max-width', '680px', 'important');
+      modal.style.setProperty('width', `${width}px`, 'important');
+      modal.style.setProperty('max-width', '900px', 'important');
       modal.setAttribute(PROCESSED_ATTR, 'widened');
     });
   });
 
-  // Also handle branch filter inputs inside dropdowns
   document.querySelectorAll('.SelectMenu-filter input').forEach(input => {
     input.style.setProperty('width', '100%', 'important');
+  });
+}
+
+/**
+ * Re-applies dropdown width to already-processed modals when the
+ * character count setting changes.
+ */
+function reapplyDropdownWidths() {
+  if (!featureToggles.widenDropdown) return;
+
+  const width = calcDropdownWidth();
+  document.querySelectorAll(`[${PROCESSED_ATTR}="widened"]`).forEach(modal => {
+    modal.style.setProperty('width', `${width}px`, 'important');
   });
 }
 
@@ -165,7 +222,6 @@ function createCopyButton(branchName) {
 function enhanceBranchNames() {
   if (!isActionsPage()) return;
 
-  // Try each selector pattern
   const found = new Set();
   BRANCH_LINK_SELECTORS.forEach(sel => {
     document.querySelectorAll(sel).forEach(el => found.add(el));
@@ -173,14 +229,12 @@ function enhanceBranchNames() {
 
   // Fallback: find all elements adjacent to git-branch octicon SVGs
   document.querySelectorAll('svg.octicon-git-branch').forEach(svg => {
-    // Look at next siblings and parent's next siblings
     let sibling = svg.nextElementSibling;
     while (sibling) {
       const a = sibling.tagName === 'A' ? sibling : sibling.querySelector('a');
       if (a) { found.add(a); break; }
       sibling = sibling.nextElementSibling;
     }
-    // Also check parent's children
     const parent = svg.parentElement;
     if (parent) {
       parent.querySelectorAll('a, span').forEach(el => {
@@ -199,12 +253,16 @@ function enhanceBranchNames() {
     if (!branchName) return;
 
     // Feature 2: Remove truncation
-    el.classList.add('gh-enhancer-branch-name');
+    if (featureToggles.fullBranchName) {
+      el.classList.add('gh-enhancer-branch-name');
+    }
 
     // Feature 3: Add copy button after the element
-    const copyBtn = createCopyButton(branchName);
-    if (el.parentElement && !el.parentElement.querySelector('.gh-enhancer-copy-btn')) {
-      el.insertAdjacentElement('afterend', copyBtn);
+    if (featureToggles.copyButton) {
+      const copyBtn = createCopyButton(branchName);
+      if (el.parentElement && !el.parentElement.querySelector('.gh-enhancer-copy-btn')) {
+        el.insertAdjacentElement('afterend', copyBtn);
+      }
     }
   });
 }
@@ -216,7 +274,6 @@ function enhanceBranchNames() {
  * Returns null if not on a valid Actions run page.
  */
 function parseWorkflowRunUrl(url) {
-  // https://github.com/{owner}/{repo}/actions/runs/{runId}
   const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/);
   if (!m) return null;
   return { owner: m[1], repo: m[2], runId: m[3] };
@@ -301,13 +358,12 @@ function createNotifyButton(runId, runUrl) {
  */
 function enhanceWorkflowNotifications() {
   if (!isActionsPage()) return;
+  if (!featureToggles.notifications) return;
 
-  // Find rows that contain an in-progress status indicator
   const runningRows = new Set();
 
   RUNNING_ROW_SELECTORS.forEach(sel => {
     document.querySelectorAll(sel).forEach(indicator => {
-      // Walk up to find the row container (Box-row, li, tr, etc.)
       let row = indicator.closest('[data-run-id], li, tr, .Box-row, article');
       if (row) runningRows.add(row);
     });
@@ -317,7 +373,6 @@ function enhanceWorkflowNotifications() {
     if (row.getAttribute(PROCESSED_ATTR + '-notify')) return;
     row.setAttribute(PROCESSED_ATTR + '-notify', 'true');
 
-    // Find the run link to get the run URL and ID
     const runLink = row.querySelector('a[href*="/actions/runs/"]');
     if (!runLink) return;
 
@@ -327,13 +382,11 @@ function enhanceWorkflowNotifications() {
 
     const notifyBtn = createNotifyButton(parsed.runId, runUrl);
 
-    // Insert notify button near the status or run title
     const statusIndicator = row.querySelector(RUNNING_ROW_SELECTORS.join(','));
     if (statusIndicator) {
       statusIndicator.closest('span, div, td')?.insertAdjacentElement('afterend', notifyBtn)
         ?? statusIndicator.insertAdjacentElement('afterend', notifyBtn);
     } else {
-      // Fallback: insert after the run link
       runLink.insertAdjacentElement('afterend', notifyBtn);
     }
   });
@@ -360,6 +413,8 @@ document.addEventListener('turbo:load', runAllEnhancements);
 document.addEventListener('turbo:render', runAllEnhancements);
 document.addEventListener('pjax:end', runAllEnhancements);
 
-// Initial run
-runAllEnhancements();
-widenBranchDropdowns();
+// Load settings first, then run enhancements
+loadSettings(() => {
+  runAllEnhancements();
+  widenBranchDropdowns();
+});

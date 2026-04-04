@@ -16,12 +16,9 @@ const css = fs.readFileSync(path.resolve(__dirname, '../styles.css'), 'utf-8');
 describe('styles.css', () => {
   // ─── Feature 1: Dropdown width rules ────────────────────────────────
 
-  test('TC-CSS-01: contains branch-select-menu dropdown width rule with 1.7 multiplier', () => {
-    expect(css).toMatch(/1\.7/);
-  });
-
-  test('TC-CSS-02: sets max-width 600px for dropdown modals', () => {
-    expect(css).toMatch(/max-width:\s*600px/);
+  test('TC-CSS-01: contains SelectMenu-list rule for dropdown scrolling', () => {
+    expect(css).toMatch(/\.SelectMenu-list/);
+    expect(css).toMatch(/max-height/);
   });
 
   // ─── Feature 2: Branch name full display ────────────────────────────

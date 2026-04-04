@@ -2,10 +2,11 @@
  * GitHub Enhancer - Content Script Tests
  *
  * Tests cover:
- *   Feature 1: Branch dropdown widening (1.7x)
+ *   Feature 1: Branch dropdown widening (by character count)
  *   Feature 2: Full branch name display in Actions workflow list
  *   Feature 3: Copy button injection next to branch names
  *   Feature 4: Notify button injection for running workflows
+ *   Feature toggles: enable/disable each feature
  *   Cross-cutting: MutationObserver / SPA navigation re-runs
  *
  * @jest-environment jsdom
@@ -33,9 +34,7 @@ function buildBranchDropdown({ selector = '.branch-select-menu', open = true } =
   details.classList.add(...selector.replace('.', '').split(' '));
   const modal = document.createElement('div');
   modal.classList.add('SelectMenu-modal');
-  // Simulate a natural width by setting inline style
   modal.style.width = '240px';
-  // getBoundingClientRect mock (jsdom returns 0 by default)
   modal.getBoundingClientRect = () => ({ width: 240, height: 200, top: 0, left: 0, right: 240, bottom: 200 });
   details.appendChild(modal);
   document.body.appendChild(details);
@@ -47,7 +46,6 @@ function buildWorkflowRow({ branchName = 'feature/long-branch-name', running = f
   const row = document.createElement('div');
   row.classList.add('Box-row');
 
-  // Branch icon + branch link
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.classList.add('octicon-git-branch');
   row.appendChild(svg);
@@ -58,13 +56,11 @@ function buildWorkflowRow({ branchName = 'feature/long-branch-name', running = f
   branchLink.href = '#';
   row.appendChild(branchLink);
 
-  // Run link (needed for notification feature)
   const runLink = document.createElement('a');
   runLink.href = `https://github.com/testowner/testrepo/actions/runs/${runId}`;
   runLink.textContent = 'Build';
   row.appendChild(runLink);
 
-  // Running indicator
   if (running) {
     const indicator = document.createElement('span');
     indicator.setAttribute('aria-label', 'In progress');
@@ -79,27 +75,16 @@ function buildWorkflowRow({ branchName = 'feature/long-branch-name', running = f
 
 // ─── Load content.js functions ────────────────────────────────────────────────
 
-/**
- * content.js was written as a plain script (not a module), so we load it by
- * evaluating it after setting up globals. We extract the key functions we need
- * to test.
- */
 const fs = require('fs');
 const path = require('path');
 const contentSrc = fs.readFileSync(path.resolve(__dirname, '../content.js'), 'utf-8');
 
-/**
- * Execute content.js in the current global scope, returning references to
- * its internal functions via a wrapper that exposes them.
- */
-function loadContentScript() {
-  // Strip all side-effect code (MutationObserver, event listeners, initial calls)
-  // that runs at module-load time. We only want the function definitions.
+function loadContentScript(overrideToggles, overrideCharCount) {
   const sideEffectMarker = '// ─── MutationObserver';
   const markerIdx = contentSrc.indexOf(sideEffectMarker);
   let functionDefs = markerIdx >= 0 ? contentSrc.substring(0, markerIdx) : contentSrc;
 
-  // Strip the two top-level event listeners between widenBranchDropdowns and Feature 2.
+  // Strip event listeners between widenBranchDropdowns and Feature 2 section
   const listenerStart = '// Watch for dropdowns being opened';
   const listenerEnd = '// ─── Feature 2';
   const ls = functionDefs.indexOf(listenerStart);
@@ -108,14 +93,33 @@ function loadContentScript() {
     functionDefs = functionDefs.substring(0, ls) + functionDefs.substring(le);
   }
 
-  // Strip 'use strict' — already in strict mode via vm
+  // Strip settings loader and storage.onChanged listener (side effects)
+  const settingsStart = '// ─── Settings loader';
+  const settingsEnd = '// ─── Feature 1';
+  const ss = functionDefs.indexOf(settingsStart);
+  const se = functionDefs.indexOf(settingsEnd);
+  if (ss >= 0 && se > ss) {
+    functionDefs = functionDefs.substring(0, ss) + functionDefs.substring(se);
+  }
+
   functionDefs = functionDefs.replace(/^'use strict';$/m, '');
 
-  // Use new Function to evaluate stripped source with access to browser globals.
-  // `location` is the shared locationMock — setPath() mutates it in place.
+  // Remove the original let declarations so we can inject our own via var
+  // featureToggles is a multi-line object literal; dropdownCharCount has a trailing comment
+  functionDefs = functionDefs.replace(/^let featureToggles\b[\s\S]*?};$/m, '');
+  functionDefs = functionDefs.replace(/^let dropdownCharCount\b.*$/m, '');
+
+  // Allow tests to override the mutable settings
+  const togglesJson = JSON.stringify(overrideToggles || {
+    widenDropdown: true, fullBranchName: true, copyButton: true, notifications: true,
+  });
+  const charCount = overrideCharCount ?? 50;
+
   const fn = new Function(
     'chrome', 'document', 'window', 'navigator', 'location', 'setTimeout', 'alert',
     `
+      var featureToggles = ${togglesJson};
+      var dropdownCharCount = ${charCount};
       ${functionDefs}
       function runAllEnhancements() {
         enhanceBranchNames();
@@ -123,6 +127,8 @@ function loadContentScript() {
       }
       return {
         widenBranchDropdowns,
+        calcDropdownWidth,
+        reapplyDropdownWidths,
         isActionsPage,
         getBranchText,
         createCopyButton,
@@ -131,7 +137,6 @@ function loadContentScript() {
         createNotifyButton,
         enhanceWorkflowNotifications,
         runAllEnhancements,
-        DROPDOWN_SCALE,
         PROCESSED_ATTR,
       };
     `
@@ -146,7 +151,6 @@ describe('Content Script', () => {
 
   beforeAll(() => {
     global.chrome = createChromeMock();
-    // Clipboard mock
     Object.assign(navigator, {
       clipboard: { writeText: jest.fn().mockResolvedValue(undefined) },
     });
@@ -155,27 +159,25 @@ describe('Content Script', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     global.chrome._resetStore();
+    setPath('/');
     funcs = loadContentScript();
   });
 
-  // ─── Feature 1: Branch dropdown widening ──────────────────────────────────
+  // ─── Feature 1: Branch dropdown widening ──────────────────────────────
 
   describe('Feature 1: widenBranchDropdowns', () => {
-    test('TC-1-01: dropdown modal is widened to 1.7x of natural width', () => {
+    test('TC-1-01: dropdown modal is widened based on character count (default 50)', () => {
       const { modal } = buildBranchDropdown();
       funcs.widenBranchDropdowns();
 
-      const expected = Math.min(Math.round(240 * 1.7), 680);
+      const expected = Math.round(50 * 7.5) + 40; // 415px
       expect(modal.style.getPropertyValue('width')).toBe(`${expected}px`);
     });
 
-    test('TC-1-02: max-width is capped at 680px', () => {
+    test('TC-1-02: max-width is set to 900px', () => {
       const { modal } = buildBranchDropdown();
-      // Simulate a very wide natural dropdown
-      modal.getBoundingClientRect = () => ({ width: 500, height: 200, top: 0, left: 0, right: 500, bottom: 200 });
       funcs.widenBranchDropdowns();
-
-      expect(modal.style.getPropertyValue('max-width')).toBe('680px');
+      expect(modal.style.getPropertyValue('max-width')).toBe('900px');
     });
 
     test('TC-1-03: already processed dropdown is not widened again', () => {
@@ -183,29 +185,57 @@ describe('Content Script', () => {
       funcs.widenBranchDropdowns();
       const firstWidth = modal.style.getPropertyValue('width');
 
-      // Change the mock width — should NOT update because already processed
-      modal.getBoundingClientRect = () => ({ width: 300, height: 200, top: 0, left: 0, right: 300, bottom: 200 });
       funcs.widenBranchDropdowns();
       expect(modal.style.getPropertyValue('width')).toBe(firstWidth);
     });
 
-    test('TC-1-04: multiple dropdowns are all widened independently', () => {
+    test('TC-1-04: multiple dropdowns are all widened', () => {
       const d1 = buildBranchDropdown();
       const d2 = buildBranchDropdown();
-      d2.modal.getBoundingClientRect = () => ({ width: 280, height: 200, top: 0, left: 0, right: 280, bottom: 200 });
-
       funcs.widenBranchDropdowns();
 
-      expect(d1.modal.style.getPropertyValue('width')).toBe(`${Math.round(240 * 1.7)}px`);
-      expect(d2.modal.style.getPropertyValue('width')).toBe(`${Math.round(280 * 1.7)}px`);
+      const expected = `${Math.round(50 * 7.5) + 40}px`;
+      expect(d1.modal.style.getPropertyValue('width')).toBe(expected);
+      expect(d2.modal.style.getPropertyValue('width')).toBe(expected);
     });
 
-    test('TC-1-05: scale constant is 1.7', () => {
-      expect(funcs.DROPDOWN_SCALE).toBe(1.7);
+    test('TC-1-05: custom character count changes width', () => {
+      const f = loadContentScript(undefined, 80);
+      const { modal } = buildBranchDropdown();
+      f.widenBranchDropdowns();
+
+      const expected = Math.round(80 * 7.5) + 40; // 640px
+      expect(modal.style.getPropertyValue('width')).toBe(`${expected}px`);
+    });
+
+    test('TC-1-06: calcDropdownWidth returns correct value', () => {
+      expect(funcs.calcDropdownWidth()).toBe(Math.round(50 * 7.5) + 40);
+    });
+
+    test('TC-1-07: disabled toggle skips dropdown widening', () => {
+      const f = loadContentScript({ widenDropdown: false, fullBranchName: true, copyButton: true, notifications: true });
+      const { modal } = buildBranchDropdown();
+      f.widenBranchDropdowns();
+
+      expect(modal.getAttribute('data-gh-enhancer')).toBeNull();
+    });
+
+    test('TC-1-08: reapplyDropdownWidths updates existing widened modals', () => {
+      const { modal } = buildBranchDropdown();
+      funcs.widenBranchDropdowns();
+
+      // Simulate char count change — load new script with different char count
+      const f2 = loadContentScript(undefined, 70);
+      // Manually mark the modal as widened (simulating prior processing)
+      modal.setAttribute('data-gh-enhancer', 'widened');
+      f2.reapplyDropdownWidths();
+
+      const expected = Math.round(70 * 7.5) + 40;
+      expect(modal.style.getPropertyValue('width')).toBe(`${expected}px`);
     });
   });
 
-  // ─── Feature 2: Full branch names ────────────────────────────────────────
+  // ─── Feature 2: Full branch names ────────────────────────────────────
 
   describe('Feature 2: Full branch names in Actions', () => {
     beforeEach(() => {
@@ -215,14 +245,12 @@ describe('Content Script', () => {
     test('TC-2-01: branch name element gets gh-enhancer-branch-name class', () => {
       const { branchLink } = buildWorkflowRow({ branchName: 'feature/very-long-branch-name-prefix/JIRA-1234' });
       funcs.enhanceBranchNames();
-
       expect(branchLink.classList.contains('gh-enhancer-branch-name')).toBe(true);
     });
 
     test('TC-2-02: data-gh-enhancer attribute is set on processed elements', () => {
       const { branchLink } = buildWorkflowRow();
       funcs.enhanceBranchNames();
-
       expect(branchLink.getAttribute('data-gh-enhancer')).toBe('branch-enhanced');
     });
 
@@ -230,7 +258,6 @@ describe('Content Script', () => {
       setPath('/owner/repo/pulls');
       const { branchLink } = buildWorkflowRow();
       funcs.enhanceBranchNames();
-
       expect(branchLink.classList.contains('gh-enhancer-branch-name')).toBe(false);
     });
 
@@ -248,7 +275,6 @@ describe('Content Script', () => {
     test('TC-2-05: empty branch name elements are skipped', () => {
       const { branchLink } = buildWorkflowRow({ branchName: '' });
       funcs.enhanceBranchNames();
-
       expect(branchLink.classList.contains('gh-enhancer-branch-name')).toBe(false);
     });
 
@@ -267,9 +293,16 @@ describe('Content Script', () => {
       setPath('/owner/repo/pulls');
       expect(funcs.isActionsPage()).toBe(false);
     });
+
+    test('TC-2-08: disabled toggle skips full branch name', () => {
+      const f = loadContentScript({ widenDropdown: true, fullBranchName: false, copyButton: true, notifications: true });
+      const { branchLink } = buildWorkflowRow({ branchName: 'feature/test' });
+      f.enhanceBranchNames();
+      expect(branchLink.classList.contains('gh-enhancer-branch-name')).toBe(false);
+    });
   });
 
-  // ─── Feature 3: Copy button ──────────────────────────────────────────────
+  // ─── Feature 3: Copy button ──────────────────────────────────────────
 
   describe('Feature 3: Copy button', () => {
     beforeEach(() => {
@@ -279,15 +312,12 @@ describe('Content Script', () => {
     test('TC-3-01: copy button is injected after branch name element', () => {
       buildWorkflowRow({ branchName: 'feature/my-branch' });
       funcs.enhanceBranchNames();
-
-      const copyBtn = document.querySelector('.gh-enhancer-copy-btn');
-      expect(copyBtn).not.toBeNull();
+      expect(document.querySelector('.gh-enhancer-copy-btn')).not.toBeNull();
     });
 
     test('TC-3-02: copy button has correct aria-label with branch name', () => {
       buildWorkflowRow({ branchName: 'develop' });
       funcs.enhanceBranchNames();
-
       const copyBtn = document.querySelector('.gh-enhancer-copy-btn');
       expect(copyBtn.getAttribute('aria-label')).toBe('Copy branch name develop');
     });
@@ -295,20 +325,16 @@ describe('Content Script', () => {
     test('TC-3-03: clicking copy button writes branch name to clipboard', async () => {
       buildWorkflowRow({ branchName: 'feature/test-copy' });
       funcs.enhanceBranchNames();
-
       const copyBtn = document.querySelector('.gh-enhancer-copy-btn');
       await copyBtn.click();
-
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('feature/test-copy');
     });
 
     test('TC-3-04: only one copy button per branch name (idempotent)', () => {
       buildWorkflowRow({ branchName: 'main' });
       funcs.enhanceBranchNames();
-      funcs.enhanceBranchNames(); // Run again
-
-      const copyBtns = document.querySelectorAll('.gh-enhancer-copy-btn');
-      expect(copyBtns.length).toBe(1);
+      funcs.enhanceBranchNames();
+      expect(document.querySelectorAll('.gh-enhancer-copy-btn').length).toBe(1);
     });
 
     test('TC-3-05: createCopyButton returns a button element', () => {
@@ -321,13 +347,18 @@ describe('Content Script', () => {
       setPath('/owner/repo');
       buildWorkflowRow({ branchName: 'main' });
       funcs.enhanceBranchNames();
+      expect(document.querySelector('.gh-enhancer-copy-btn')).toBeNull();
+    });
 
-      const copyBtn = document.querySelector('.gh-enhancer-copy-btn');
-      expect(copyBtn).toBeNull();
+    test('TC-3-07: disabled toggle skips copy button', () => {
+      const f = loadContentScript({ widenDropdown: true, fullBranchName: true, copyButton: false, notifications: true });
+      buildWorkflowRow({ branchName: 'main' });
+      f.enhanceBranchNames();
+      expect(document.querySelector('.gh-enhancer-copy-btn')).toBeNull();
     });
   });
 
-  // ─── Feature 4: Notify button ────────────────────────────────────────────
+  // ─── Feature 4: Notify button ────────────────────────────────────────
 
   describe('Feature 4: Workflow completion notifications', () => {
     beforeEach(() => {
@@ -337,70 +368,63 @@ describe('Content Script', () => {
     test('TC-4-01: notify button is injected for running workflow rows', () => {
       buildWorkflowRow({ running: true, runId: '99001' });
       funcs.enhanceWorkflowNotifications();
-
-      const notifyBtn = document.querySelector('.gh-enhancer-notify-btn');
-      expect(notifyBtn).not.toBeNull();
+      expect(document.querySelector('.gh-enhancer-notify-btn')).not.toBeNull();
     });
 
     test('TC-4-02: notify button is NOT injected for non-running rows', () => {
       buildWorkflowRow({ running: false, runId: '99002' });
       funcs.enhanceWorkflowNotifications();
-
-      const notifyBtn = document.querySelector('.gh-enhancer-notify-btn');
-      expect(notifyBtn).toBeNull();
+      expect(document.querySelector('.gh-enhancer-notify-btn')).toBeNull();
     });
 
     test('TC-4-03: notify button displays "通知" label', () => {
       buildWorkflowRow({ running: true, runId: '99003' });
       funcs.enhanceWorkflowNotifications();
-
-      const notifyBtn = document.querySelector('.gh-enhancer-notify-btn');
-      expect(notifyBtn.textContent).toContain('通知');
+      expect(document.querySelector('.gh-enhancer-notify-btn').textContent).toContain('通知');
     });
 
     test('TC-4-04: notify button has correct data-run-id attribute', () => {
       buildWorkflowRow({ running: true, runId: '77777' });
       funcs.enhanceWorkflowNotifications();
-
-      const notifyBtn = document.querySelector('.gh-enhancer-notify-btn');
-      expect(notifyBtn.dataset.runId).toBe('77777');
+      expect(document.querySelector('.gh-enhancer-notify-btn').dataset.runId).toBe('77777');
     });
 
     test('TC-4-05: idempotent - notify button only injected once per row', () => {
       buildWorkflowRow({ running: true, runId: '99005' });
       funcs.enhanceWorkflowNotifications();
-      funcs.enhanceWorkflowNotifications(); // Run again
-
-      const notifyBtns = document.querySelectorAll('.gh-enhancer-notify-btn');
-      expect(notifyBtns.length).toBe(1);
+      funcs.enhanceWorkflowNotifications();
+      expect(document.querySelectorAll('.gh-enhancer-notify-btn').length).toBe(1);
     });
 
     test('TC-4-06: multiple running rows each get a notify button', () => {
       buildWorkflowRow({ running: true, runId: '100' });
       buildWorkflowRow({ running: true, runId: '200' });
-      buildWorkflowRow({ running: false, runId: '300' }); // Not running
+      buildWorkflowRow({ running: false, runId: '300' });
       funcs.enhanceWorkflowNotifications();
-
-      const notifyBtns = document.querySelectorAll('.gh-enhancer-notify-btn');
-      expect(notifyBtns.length).toBe(2);
+      expect(document.querySelectorAll('.gh-enhancer-notify-btn').length).toBe(2);
     });
 
     test('TC-4-07: does not inject on non-Actions pages', () => {
       setPath('/owner/repo/code');
       buildWorkflowRow({ running: true, runId: '99007' });
       funcs.enhanceWorkflowNotifications();
+      expect(document.querySelector('.gh-enhancer-notify-btn')).toBeNull();
+    });
 
-      const notifyBtn = document.querySelector('.gh-enhancer-notify-btn');
-      expect(notifyBtn).toBeNull();
+    test('TC-4-08: disabled toggle skips notification buttons', () => {
+      const f = loadContentScript({ widenDropdown: true, fullBranchName: true, copyButton: true, notifications: false });
+      buildWorkflowRow({ running: true, runId: '99008' });
+      f.enhanceWorkflowNotifications();
+      expect(document.querySelector('.gh-enhancer-notify-btn')).toBeNull();
     });
   });
 
-  // ─── parseWorkflowRunUrl ────────────────────────────────────────────────
+  // ─── parseWorkflowRunUrl ────────────────────────────────────────────
 
   describe('parseWorkflowRunUrl', () => {
     test('TC-P-01: parses a valid Actions run URL', () => {
-      const result = funcs.parseWorkflowRunUrl('https://github.com/owner/repo/actions/runs/12345');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo', runId: '12345' });
+      expect(funcs.parseWorkflowRunUrl('https://github.com/owner/repo/actions/runs/12345'))
+        .toEqual({ owner: 'owner', repo: 'repo', runId: '12345' });
     });
 
     test('TC-P-02: returns null for non-matching URL', () => {
@@ -408,8 +432,8 @@ describe('Content Script', () => {
     });
 
     test('TC-P-03: parses URL with long run ID', () => {
-      const result = funcs.parseWorkflowRunUrl('https://github.com/my-org/my-repo/actions/runs/9876543210');
-      expect(result).toEqual({ owner: 'my-org', repo: 'my-repo', runId: '9876543210' });
+      expect(funcs.parseWorkflowRunUrl('https://github.com/my-org/my-repo/actions/runs/9876543210'))
+        .toEqual({ owner: 'my-org', repo: 'my-repo', runId: '9876543210' });
     });
 
     test('TC-P-04: returns null for URL without run ID', () => {
@@ -417,12 +441,12 @@ describe('Content Script', () => {
     });
 
     test('TC-P-05: parses URL with additional path segments after run ID', () => {
-      const result = funcs.parseWorkflowRunUrl('https://github.com/owner/repo/actions/runs/555/jobs/1');
-      expect(result).toEqual({ owner: 'owner', repo: 'repo', runId: '555' });
+      expect(funcs.parseWorkflowRunUrl('https://github.com/owner/repo/actions/runs/555/jobs/1'))
+        .toEqual({ owner: 'owner', repo: 'repo', runId: '555' });
     });
   });
 
-  // ─── getBranchText ──────────────────────────────────────────────────────
+  // ─── getBranchText ──────────────────────────────────────────────────
 
   describe('getBranchText', () => {
     test('TC-B-01: extracts trimmed text content', () => {
@@ -437,14 +461,13 @@ describe('Content Script', () => {
     });
   });
 
-  // ─── runAllEnhancements ─────────────────────────────────────────────────
+  // ─── runAllEnhancements ─────────────────────────────────────────────
 
   describe('runAllEnhancements', () => {
     test('TC-R-01: enhances both branch names and notifications on Actions page', () => {
       setPath('/owner/repo/actions');
       buildWorkflowRow({ branchName: 'main', running: true, runId: '500' });
       funcs.runAllEnhancements();
-
       expect(document.querySelector('.gh-enhancer-branch-name')).not.toBeNull();
       expect(document.querySelector('.gh-enhancer-notify-btn')).not.toBeNull();
     });
@@ -453,7 +476,6 @@ describe('Content Script', () => {
       setPath('/owner/repo/settings');
       buildWorkflowRow({ branchName: 'main', running: true, runId: '600' });
       funcs.runAllEnhancements();
-
       expect(document.querySelector('.gh-enhancer-branch-name')).toBeNull();
       expect(document.querySelector('.gh-enhancer-notify-btn')).toBeNull();
     });

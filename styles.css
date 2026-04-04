@@ -1,35 +1,10 @@
 /* =====================================================
-   Feature 1: Widen branch dropdowns (1.7x)
-   Applies to repository pages and GitHub Actions
+   Feature 1: Widen branch dropdowns
+   Width is controlled dynamically by content.js based
+   on the user-configured character count.
    ===================================================== */
 
-/* Branch selector dropdown panel */
-.SelectMenu,
-.SelectMenu-modal,
-details[data-target*="branch"] .SelectMenu,
-details[data-target*="branch"] .SelectMenu-modal {
-  min-width: 0 !important;
-  width: auto !important;
-}
-
-/* Branch filter input inside dropdown */
-.branch-select-menu .SelectMenu-modal,
-.branch-select-menu .SelectMenu-list,
-[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal {
-  width: calc(var(--original-width, 240px) * 1.7) !important;
-  max-width: 600px !important;
-}
-
-/* GitHub Actions "Run workflow" branch selector */
-[data-target*="branch"] .SelectMenu-modal,
-.js-branch-select-menu .SelectMenu-modal,
-summary[aria-label*="branch"] + .SelectMenu .SelectMenu-modal,
-summary[aria-label*="Branch"] + .SelectMenu .SelectMenu-modal {
-  width: calc(240px * 1.7) !important;
-  max-width: 600px !important;
-}
-
-/* General branch-related Select menus */
+/* General branch-related Select menus — ensure list scrolls */
 .SelectMenu-list {
   max-height: 400px;
   overflow-y: auto;

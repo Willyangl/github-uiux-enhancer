@@ -2,6 +2,8 @@
  * GitHub Enhancer - Popup UI Tests
  *
  * Tests cover:
+ *   - Feature toggle switches
+ *   - Dropdown character count setting
  *   - Token validation (format check)
  *   - Watched runs rendering
  *   - showStatus helper
@@ -20,20 +22,17 @@ const path = require('path');
 const popupHtml = fs.readFileSync(path.resolve(__dirname, '../popup.html'), 'utf-8');
 
 function setupPopupDOM() {
-  // Extract the <body> content (without the <script> tag so we load popup.js ourselves)
   const bodyMatch = popupHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   if (bodyMatch) {
     document.body.innerHTML = bodyMatch[1].replace(/<script[\s\S]*?<\/script>/gi, '');
   }
 }
 
-// Load popup.js source
 const popupSrc = fs.readFileSync(path.resolve(__dirname, '../popup.js'), 'utf-8');
 
 function loadPopupScript(chromeMock) {
   global.chrome = chromeMock;
   global.alert = global.alert || jest.fn();
-  // popup.js references DOM elements directly, so DOM must be ready
   setupPopupDOM();
 
   const src = popupSrc.replace(/^'use strict';$/m, '');
@@ -42,7 +41,7 @@ function loadPopupScript(chromeMock) {
     'chrome', 'fetch', 'document', 'window', 'navigator', 'alert', 'setTimeout', 'Promise',
     `
       ${src}
-      return { renderWatchedRuns, showStatus };
+      return { renderWatchedRuns, showStatus, updateDropdownCharVisibility };
     `
   );
   return fn(chromeMock, global.fetch, document, window, navigator, alert, setTimeout, Promise);
@@ -85,6 +84,79 @@ describe('Popup UI', () => {
     });
   });
 
+  // ─── Feature toggles ─────────────────────────────────────────────────
+
+  describe('Feature toggles', () => {
+    test('TC-PO-20: all 4 toggle checkboxes exist', () => {
+      expect(document.getElementById('toggle-widenDropdown')).not.toBeNull();
+      expect(document.getElementById('toggle-fullBranchName')).not.toBeNull();
+      expect(document.getElementById('toggle-copyButton')).not.toBeNull();
+      expect(document.getElementById('toggle-notifications')).not.toBeNull();
+    });
+
+    test('TC-PO-21: toggles are checked by default', () => {
+      expect(document.getElementById('toggle-widenDropdown').checked).toBe(true);
+      expect(document.getElementById('toggle-fullBranchName').checked).toBe(true);
+      expect(document.getElementById('toggle-copyButton').checked).toBe(true);
+      expect(document.getElementById('toggle-notifications').checked).toBe(true);
+    });
+
+    test('TC-PO-22: toggling a switch saves to storage', (done) => {
+      const toggle = document.getElementById('toggle-copyButton');
+      toggle.checked = false;
+      toggle.dispatchEvent(new Event('change'));
+
+      // Wait for async storage set
+      setTimeout(() => {
+        chromeMock.storage.local.get('featureToggles', (data) => {
+          expect(data.featureToggles.copyButton).toBe(false);
+          done();
+        });
+      }, 50);
+    });
+
+    test('TC-PO-23: disabling dropdown toggle hides char count setting', () => {
+      funcs.updateDropdownCharVisibility(false);
+      const setting = document.getElementById('dropdown-char-setting');
+      expect(setting.style.display).toBe('none');
+    });
+
+    test('TC-PO-24: enabling dropdown toggle shows char count setting', () => {
+      funcs.updateDropdownCharVisibility(true);
+      const setting = document.getElementById('dropdown-char-setting');
+      expect(setting.style.display).toBe('flex');
+    });
+  });
+
+  // ─── Dropdown character count ─────────────────────────────────────────
+
+  describe('Dropdown character count', () => {
+    test('TC-PO-25: char count input exists with default value 50', () => {
+      const input = document.getElementById('dropdown-char-count');
+      expect(input).not.toBeNull();
+      expect(input.value).toBe('50');
+    });
+
+    test('TC-PO-26: char count has min=20 and max=120', () => {
+      const input = document.getElementById('dropdown-char-count');
+      expect(input.min).toBe('20');
+      expect(input.max).toBe('120');
+    });
+
+    test('TC-PO-27: changing char count saves to storage', (done) => {
+      const input = document.getElementById('dropdown-char-count');
+      input.value = '70';
+      input.dispatchEvent(new Event('change'));
+
+      setTimeout(() => {
+        chromeMock.storage.local.get('dropdownCharCount', (data) => {
+          expect(data.dropdownCharCount).toBe(70);
+          done();
+        });
+      }, 50);
+    });
+  });
+
   // ─── Token validation ─────────────────────────────────────────────────
 
   describe('Token validation on save', () => {
@@ -93,7 +165,6 @@ describe('Popup UI', () => {
       const saveBtn = document.getElementById('save-token-btn');
       input.value = '';
       saveBtn.click();
-
       const statusMsg = document.getElementById('token-status-msg');
       expect(statusMsg.textContent).toContain('トークンを入力してください');
     });
@@ -103,7 +174,6 @@ describe('Popup UI', () => {
       const saveBtn = document.getElementById('save-token-btn');
       input.value = 'invalid-token-format';
       saveBtn.click();
-
       const statusMsg = document.getElementById('token-status-msg');
       expect(statusMsg.textContent).toContain('有効なGitHubトークン形式ではありません');
     });
@@ -113,14 +183,10 @@ describe('Popup UI', () => {
         ok: true,
         json: () => Promise.resolve({ login: 'testuser' }),
       });
-
       const input = document.getElementById('token-input');
       input.value = 'ghp_validtokenvalue1234';
-      const saveBtn = document.getElementById('save-token-btn');
-      saveBtn.click();
+      document.getElementById('save-token-btn').click();
 
-      // The fetch should be called (format was accepted)
-      // Wait for async operations
       await new Promise(r => setTimeout(r, 50));
       expect(fetch).toHaveBeenCalledWith(
         'https://api.github.com/user',
@@ -135,11 +201,9 @@ describe('Popup UI', () => {
         ok: true,
         json: () => Promise.resolve({ login: 'testuser2' }),
       });
-
       const input = document.getElementById('token-input');
       input.value = 'github_pat_validtokenvalue1234';
-      const saveBtn = document.getElementById('save-token-btn');
-      saveBtn.click();
+      document.getElementById('save-token-btn').click();
 
       await new Promise(r => setTimeout(r, 50));
       expect(fetch).toHaveBeenCalled();
@@ -151,8 +215,8 @@ describe('Popup UI', () => {
   describe('renderWatchedRuns', () => {
     test('TC-PO-09: shows empty message when no runs', () => {
       funcs.renderWatchedRuns({});
-      const list = document.getElementById('watched-runs-list');
-      expect(list.textContent).toContain('通知待ちのワークフローはありません');
+      expect(document.getElementById('watched-runs-list').textContent)
+        .toContain('通知待ちのワークフローはありません');
     });
 
     test('TC-PO-10: renders watched run items', () => {
@@ -160,25 +224,20 @@ describe('Popup UI', () => {
         '111': { owner: 'org', repo: 'app', runId: '111', runUrl: 'https://github.com/org/app/actions/runs/111' },
         '222': { owner: 'org', repo: 'lib', runId: '222', runUrl: 'https://github.com/org/lib/actions/runs/222' },
       });
-
-      const items = document.querySelectorAll('.watched-run-item');
-      expect(items.length).toBe(2);
+      expect(document.querySelectorAll('.watched-run-item').length).toBe(2);
     });
 
     test('TC-PO-11: each item shows owner/repo and run ID', () => {
       funcs.renderWatchedRuns({
         '999': { owner: 'myorg', repo: 'myrepo', runId: '999', runUrl: 'https://github.com/myorg/myrepo/actions/runs/999' },
       });
-
-      const link = document.querySelector('.watched-run-link');
-      expect(link.textContent).toBe('myorg/myrepo #999');
+      expect(document.querySelector('.watched-run-link').textContent).toBe('myorg/myrepo #999');
     });
 
     test('TC-PO-12: each item has a remove button', () => {
       funcs.renderWatchedRuns({
         '888': { owner: 'o', repo: 'r', runId: '888', runUrl: 'u' },
       });
-
       const removeBtn = document.querySelector('.btn-danger');
       expect(removeBtn).not.toBeNull();
       expect(removeBtn.textContent).toBe('解除');
@@ -191,17 +250,12 @@ describe('Popup UI', () => {
           '888': { owner: 'o', repo: 'r', runId: '888', runUrl: 'u' },
         },
       });
-
       funcs.renderWatchedRuns({
         '777': { owner: 'o', repo: 'r', runId: '777', runUrl: 'u' },
         '888': { owner: 'o', repo: 'r', runId: '888', runUrl: 'u' },
       });
+      document.querySelector('.btn-danger').click();
 
-      // Click remove on first item
-      const removeBtn = document.querySelector('.btn-danger');
-      removeBtn.click();
-
-      // Wait for async storage update
       await new Promise(r => setTimeout(r, 50));
       const data = await chromeMock.storage.local.get('watchedRuns');
       expect(Object.keys(data.watchedRuns).length).toBe(1);
@@ -211,7 +265,6 @@ describe('Popup UI', () => {
       funcs.renderWatchedRuns({
         '555': { owner: 'o', repo: 'r', runId: '555', runUrl: 'https://github.com/o/r/actions/runs/555' },
       });
-
       const link = document.querySelector('.watched-run-link');
       expect(link.href).toBe('https://github.com/o/r/actions/runs/555');
       expect(link.target).toBe('_blank');

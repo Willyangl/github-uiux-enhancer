@@ -6,9 +6,30 @@ const tokenStatusMsg = document.getElementById('token-status-msg');
 const tokenStatus = document.getElementById('token-status');
 const watchedRunsList = document.getElementById('watched-runs-list');
 
+// Feature toggles
+const toggleIds = {
+  widenDropdown: 'toggle-widenDropdown',
+  fullBranchName: 'toggle-fullBranchName',
+  copyButton: 'toggle-copyButton',
+  notifications: 'toggle-notifications',
+};
+const dropdownCharInput = document.getElementById('dropdown-char-count');
+const dropdownCharSetting = document.getElementById('dropdown-char-setting');
+
+const DEFAULTS = {
+  featureToggles: {
+    widenDropdown: true,
+    fullBranchName: true,
+    copyButton: true,
+    notifications: true,
+  },
+  dropdownCharCount: 50,
+};
+
 // ─── Load saved state ─────────────────────────────────────────────────────────
 
-chrome.storage.local.get(['githubToken', 'watchedRuns'], (data) => {
+chrome.storage.local.get(['githubToken', 'watchedRuns', 'featureToggles', 'dropdownCharCount'], (data) => {
+  // Token status
   if (data.githubToken) {
     tokenInput.placeholder = '保存済み（変更する場合は入力してください）';
     tokenStatus.innerHTML = `
@@ -22,8 +43,57 @@ chrome.storage.local.get(['githubToken', 'watchedRuns'], (data) => {
       </div>`;
   }
 
+  // Feature toggles
+  const toggles = { ...DEFAULTS.featureToggles, ...(data.featureToggles || {}) };
+  Object.entries(toggleIds).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = toggles[key];
+  });
+
+  // Dropdown char count
+  const charCount = data.dropdownCharCount ?? DEFAULTS.dropdownCharCount;
+  if (dropdownCharInput) dropdownCharInput.value = charCount;
+
+  // Show/hide char count setting based on toggle
+  updateDropdownCharVisibility(toggles.widenDropdown);
+
   renderWatchedRuns(data.watchedRuns || {});
 });
+
+// ─── Feature toggle handlers ──────────────────────────────────────────────────
+
+Object.entries(toggleIds).forEach(([key, id]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', () => {
+    chrome.storage.local.get('featureToggles', (data) => {
+      const toggles = { ...DEFAULTS.featureToggles, ...(data.featureToggles || {}) };
+      toggles[key] = el.checked;
+      chrome.storage.local.set({ featureToggles: toggles });
+
+      if (key === 'widenDropdown') {
+        updateDropdownCharVisibility(el.checked);
+      }
+    });
+  });
+});
+
+function updateDropdownCharVisibility(enabled) {
+  if (dropdownCharSetting) {
+    dropdownCharSetting.style.display = enabled ? 'flex' : 'none';
+  }
+}
+
+// Dropdown char count handler
+if (dropdownCharInput) {
+  dropdownCharInput.addEventListener('change', () => {
+    let val = parseInt(dropdownCharInput.value, 10);
+    if (isNaN(val) || val < 20) val = 20;
+    if (val > 120) val = 120;
+    dropdownCharInput.value = val;
+    chrome.storage.local.set({ dropdownCharCount: val });
+  });
+}
 
 // ─── Save token ───────────────────────────────────────────────────────────────
 

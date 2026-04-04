@@ -16,7 +16,7 @@
       font-size: 13px;
       color: #24292f;
       background: #ffffff;
-      width: 320px;
+      width: 340px;
       padding: 0;
     }
 
@@ -86,7 +86,8 @@
     }
 
     input[type="password"],
-    input[type="text"] {
+    input[type="text"],
+    input[type="number"] {
       flex: 1;
       padding: 5px 8px;
       font-size: 12px;
@@ -98,10 +99,17 @@
     }
 
     input[type="password"]:focus,
-    input[type="text"]:focus {
+    input[type="text"]:focus,
+    input[type="number"]:focus {
       border-color: #0969da;
       background: #fff;
       box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1);
+    }
+
+    input[type="number"] {
+      width: 64px;
+      flex: 0 0 64px;
+      text-align: center;
     }
 
     button {
@@ -144,27 +152,98 @@
     .status-msg.success { color: #1a7f37; }
     .status-msg.error   { color: #cf222e; }
 
-    .feature-list {
-      list-style: none;
-      padding: 0;
-    }
+    /* ─── Feature toggle switches ────────────────────────── */
 
-    .feature-list li {
+    .feature-item {
       display: flex;
-      align-items: flex-start;
-      gap: 6px;
-      padding: 4px 0;
-      font-size: 12px;
-      line-height: 1.5;
-      color: #24292f;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #f6f8fa;
     }
 
-    .feature-list li::before {
-      content: "✓";
-      color: #1a7f37;
-      font-weight: bold;
+    .feature-item:last-child {
+      border-bottom: none;
+    }
+
+    .feature-label {
+      font-size: 12px;
+      line-height: 1.4;
+      color: #24292f;
+      flex: 1;
+      padding-right: 8px;
+    }
+
+    .feature-sub-setting {
+      margin-top: 6px;
+      padding: 6px 0 2px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .feature-sub-setting label {
+      font-size: 11px;
+      color: #57606a;
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    .feature-sub-setting .unit {
+      font-size: 11px;
+      color: #57606a;
+      white-space: nowrap;
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
       flex-shrink: 0;
     }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #d0d7de;
+      border-radius: 20px;
+      transition: background-color 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: "";
+      position: absolute;
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background-color: #1a7f37;
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+    }
+
+    .toggle input:focus-visible + .toggle-slider {
+      box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+    }
+
+    /* ─── Watched runs ───────────────────────────────────── */
 
     .watched-runs {
       margin-top: 6px;
@@ -229,15 +308,46 @@
     <h1>GitHub Enhancer</h1>
   </div>
 
-  <!-- Features overview -->
+  <!-- Feature toggles -->
   <div class="section">
-    <div class="section-title">有効な機能</div>
-    <ul class="feature-list">
-      <li>ブランチ選択プルダウンの幅を1.7倍に拡大</li>
-      <li>Actionsワークフロー履歴のブランチ名を全表示</li>
-      <li>ブランチ名横にコピーボタンを表示</li>
-      <li>ワークフロー完了時にブラウザ通知</li>
-    </ul>
+    <div class="section-title">機能スイッチ</div>
+
+    <div class="feature-item">
+      <span class="feature-label">ブランチ選択プルダウンの幅を拡大</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-widenDropdown" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="feature-sub-setting" id="dropdown-char-setting">
+      <label for="dropdown-char-count">表示文字数:</label>
+      <input type="number" id="dropdown-char-count" min="20" max="120" value="50" />
+      <span class="unit">文字</span>
+    </div>
+
+    <div class="feature-item">
+      <span class="feature-label">Actionsワークフロー履歴のブランチ名を全表示</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-fullBranchName" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="feature-item">
+      <span class="feature-label">ブランチ名横にコピーボタンを表示</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-copyButton" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="feature-item">
+      <span class="feature-label">ワークフロー完了時にブラウザ通知</span>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-notifications" checked />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
   </div>
 
   <!-- GitHub Token settings -->
