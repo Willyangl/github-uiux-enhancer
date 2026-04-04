@@ -10,8 +10,8 @@ jobs:
       - name: Step 1 - Start
         run: echo "Starting dummy workflow..."
 
-      - name: Step 2 - Wait 1 minutes
-        run: sleep 60
+      - name: Step 2 - Sleep
+        run: sleep 30
 
       - name: Step 3 - Done
         run: echo "Dummy workflow completed."
