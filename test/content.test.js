@@ -115,9 +115,34 @@ function loadContentScript(overrideToggles, overrideCharCount) {
   });
   const charCount = overrideCharCount ?? 50;
 
+  // i18n mock — simple passthrough
+  const i18nMockCode = `
+    var i18n = {
+      t: function(key, params) {
+        var map = {
+          'content.copied': 'Copied!', 'content.copyFailed': 'Failed to copy',
+          'content.notify': '通知', 'content.notifying': '通知中', 'content.notifyDone': '通知完了',
+          'content.notifyTitle': 'Notify me', 'content.notifyWatching': 'Watching',
+          'content.notifyCompleted': 'Completed', 'content.alertTokenRequired': 'Token required',
+          'content.alertParseFailed': 'Parse failed', 'content.toastTitle': 'Workflow Completed',
+          'content.toastLink': 'View details',
+          'content.conclusionSuccess': 'Success', 'content.conclusionFailure': 'Failure',
+          'content.conclusionCancelled': 'Cancelled', 'content.conclusionTimedOut': 'Timed out',
+          'content.conclusionSkipped': 'Skipped',
+        };
+        var val = map[key] || key;
+        if (params) { for (var k in params) { val = val.replace('{' + k + '}', params[k]); } }
+        return val;
+      },
+      load: function() { return Promise.resolve('ja'); },
+      getLang: function() { return 'ja'; },
+    };
+  `;
+
   const fn = new Function(
     'chrome', 'document', 'window', 'navigator', 'location', 'setTimeout', 'alert',
     `
+      ${i18nMockCode}
       var featureToggles = ${togglesJson};
       var dropdownCharCount = ${charCount};
       ${functionDefs}

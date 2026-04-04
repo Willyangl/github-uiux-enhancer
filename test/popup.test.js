@@ -30,6 +30,36 @@ function setupPopupDOM() {
 
 const popupSrc = fs.readFileSync(path.resolve(__dirname, '../popup.js'), 'utf-8');
 
+// Minimal i18n mock — returns the key itself (or a simple passthrough)
+const i18nMock = {
+  load: () => Promise.resolve('ja'),
+  t: (key, params) => {
+    // Return a readable fallback for tests
+    const map = {
+      'popup.tokenPlaceholder': 'ghp_xxxxxxxxxxxx',
+      'popup.tokenPlaceholderSaved': '保存済み',
+      'popup.tokenSet': 'トークン設定済み',
+      'popup.tokenNotSet': 'トークン未設定',
+      'popup.tokenEmpty': 'トークンを入力してください',
+      'popup.tokenInvalid': '有効なGitHubトークン形式ではありません',
+      'popup.tokenSave': '保存',
+      'popup.tokenSaving': '確認中…',
+      'popup.watchedEmpty': '通知待ちのワークフローはありません',
+      'popup.watchedRemove': '解除',
+    };
+    let val = map[key] || key;
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        val = val.replace(`{${k}}`, v);
+      }
+    }
+    return val;
+  },
+  getLang: () => 'ja',
+  setLang: () => Promise.resolve(),
+  SUPPORTED: ['ja', 'en', 'zh'],
+};
+
 function loadPopupScript(chromeMock) {
   global.chrome = chromeMock;
   global.alert = global.alert || jest.fn();
@@ -38,13 +68,13 @@ function loadPopupScript(chromeMock) {
   const src = popupSrc.replace(/^'use strict';$/m, '');
 
   const fn = new Function(
-    'chrome', 'fetch', 'document', 'window', 'navigator', 'alert', 'setTimeout', 'Promise',
+    'chrome', 'fetch', 'document', 'window', 'navigator', 'alert', 'setTimeout', 'Promise', 'i18n',
     `
       ${src}
       return { renderWatchedRuns, showStatus, updateDropdownCharVisibility };
     `
   );
-  return fn(chromeMock, global.fetch, document, window, navigator, alert, setTimeout, Promise);
+  return fn(chromeMock, global.fetch, document, window, navigator, alert, setTimeout, Promise, i18nMock);
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
