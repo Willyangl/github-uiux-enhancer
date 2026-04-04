@@ -104,6 +104,8 @@ function createChromeMock() {
   const createdTabs = [];
   const tabs = {
     create(options) { createdTabs.push(options); },
+    query() { return Promise.resolve([]); },
+    sendMessage() { return Promise.resolve(); },
     _getCreated() { return createdTabs; },
   };
 

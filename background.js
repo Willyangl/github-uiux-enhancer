@@ -78,6 +78,7 @@ async function pollWatchedRuns() {
         if (status === 'completed') {
           completed.push(run.runId);
           showNotification(run, name, head_branch, conclusion);
+          notifyContentScripts(run, name, head_branch, conclusion);
         }
       } catch (err) {
         console.warn(`GitHub Enhancer: fetch error for run ${run.runId}`, err);
@@ -133,14 +134,35 @@ function showNotification(run, workflowName, branchName, conclusion) {
   });
 }
 
-// Open the workflow run page when notification is clicked
+/**
+ * Sends a WORKFLOW_COMPLETED message to all open GitHub tabs so the
+ * content script can show an in-page toast notification.
+ */
+async function notifyContentScripts(run, workflowName, branchName, conclusion) {
+  const tabs = await chrome.tabs.query({ url: 'https://github.com/*' });
+  const data = {
+    workflowName,
+    branchName,
+    conclusion,
+    runUrl: run.runUrl,
+    owner: run.owner,
+    repo: run.repo,
+    runId: run.runId,
+  };
+  for (const tab of tabs) {
+    chrome.tabs.sendMessage(tab.id, { type: 'WORKFLOW_COMPLETED', data }).catch(() => {});
+  }
+}
+
+// Open the workflow run page when browser notification is clicked
 chrome.notifications.onClicked.addListener((notificationId) => {
   const runId = notificationId.replace('run-', '');
-  chrome.storage.local.get('notificationUrls', (data) => {
-    const urls = data.notificationUrls || {};
-    const url = urls[runId];
-    if (url) {
-      chrome.tabs.create({ url });
+  chrome.storage.local.get('watchedRuns', (data) => {
+    // Try to find URL from the run ID in recently completed or current watched runs
+    const watched = data.watchedRuns || {};
+    const run = watched[runId];
+    if (run && run.runUrl) {
+      chrome.tabs.create({ url: run.runUrl });
     }
   });
   chrome.notifications.clear(notificationId);

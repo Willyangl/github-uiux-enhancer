@@ -1,14 +1,16 @@
 name: Test
 
 on:
-  # 手動実行可能（ブランチ選択UIの動作確認にも使える）
-  workflow_dispatch:
+  # 無効化: push/PR トリガーをコメントアウト
+  # workflow_dispatch:
+  # push:
+  #   branches: ['**']
+  # pull_request:
+  #   branches: [main]
 
-  push:
-    branches: ['**']
-
-  pull_request:
-    branches: [main]
+  # このワークフローを無効にするため、存在しないイベントで発火させる
+  schedule:
+    - cron: '0 0 31 2 *'  # 2月31日 = 永遠に発火しない
 
 jobs:
   test:

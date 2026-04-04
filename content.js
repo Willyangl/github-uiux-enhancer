@@ -245,6 +245,31 @@ function getBranchText(el) {
 }
 
 /**
+ * Shows a tooltip bubble above the target element, then fades out.
+ */
+function showCopyTooltip(target, text) {
+  // Remove any existing tooltip
+  const prev = document.querySelector('.gh-enhancer-tooltip');
+  if (prev) prev.remove();
+
+  const tip = document.createElement('div');
+  tip.className = 'gh-enhancer-tooltip';
+  tip.textContent = text;
+  document.body.appendChild(tip);
+
+  // Position above the target button
+  const rect = target.getBoundingClientRect();
+  tip.style.top = `${window.scrollY + rect.top - tip.offsetHeight - 6}px`;
+  tip.style.left = `${window.scrollX + rect.left + rect.width / 2 - tip.offsetWidth / 2}px`;
+
+  // Fade out and remove after delay
+  setTimeout(() => {
+    tip.classList.add('gh-enhancer-tooltip-hide');
+    tip.addEventListener('transitionend', () => tip.remove());
+  }, 1500);
+}
+
+/**
  * Creates a copy button for a given branch name.
  */
 function createCopyButton(branchName) {
@@ -260,21 +285,11 @@ function createCopyButton(branchName) {
   btn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
+
+    let success = false;
     try {
       await navigator.clipboard.writeText(branchName);
-      btn.classList.add('copied');
-      btn.title = 'Copied!';
-      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-        <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
-      </svg>`;
-      setTimeout(() => {
-        btn.classList.remove('copied');
-        btn.title = `Copy branch name: ${branchName}`;
-        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
-          <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
-        </svg>`;
-      }, 2000);
+      success = true;
     } catch {
       // Fallback for older browsers
       const ta = document.createElement('textarea');
@@ -283,11 +298,25 @@ function createCopyButton(branchName) {
       ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
-      document.execCommand('copy');
+      success = document.execCommand('copy');
       document.body.removeChild(ta);
-      btn.classList.add('copied');
-      setTimeout(() => btn.classList.remove('copied'), 2000);
     }
+
+    // Show checkmark icon + "Copied!" tooltip
+    btn.classList.add('copied');
+    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+    </svg>`;
+    showCopyTooltip(btn, success ? 'Copied!' : 'Failed to copy');
+
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.title = `Copy branch name: ${branchName}`;
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+      </svg>`;
+    }, 2000);
   });
 
   return btn;
@@ -330,7 +359,7 @@ function enhanceBranchNames() {
     const branchName = getBranchText(el);
     if (!branchName) return;
 
-    // Feature 2: Remove truncation
+    // Feature 2: Show full branch name (auto-wrap within default width)
     if (featureToggles.fullBranchName) {
       el.classList.add('gh-enhancer-branch-name');
     }
@@ -432,42 +461,227 @@ function createNotifyButton(runId, runUrl) {
 }
 
 /**
- * Finds running workflow rows and injects a "Notify me" button.
+ * Detects whether a workflow row represents a non-completed run.
+ * Uses multiple strategies since GitHub's DOM changes frequently:
+ *   - Legacy status indicator selectors
+ *   - Text-content-based detection ("In progress", "Queued", etc.)
+ *   - Absence of completed status text
+ */
+function isRowRunning(row) {
+  // Strategy 1: legacy selector-based detection
+  if (row.querySelector(RUNNING_ROW_SELECTORS.join(','))) return true;
+
+  // Strategy 2: text-content detection (case-insensitive)
+  const text = (row.textContent || '').toLowerCase();
+  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
+  if (runningKeywords.some(kw => text.includes(kw))) return true;
+
+  // Strategy 3: completed statuses — if present, NOT running
+  const completedKeywords = ['completed', 'success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
+  if (completedKeywords.some(kw => text.includes(kw))) return false;
+
+  // Strategy 4: look for animated/spinning SVG (common for in-progress)
+  const svgs = row.querySelectorAll('svg');
+  for (const svg of svgs) {
+    if (svg.querySelector('animate, animateTransform')) return true;
+    const cls = svg.className?.baseVal || svg.getAttribute('class') || '';
+    if (/spin|progress|loading|pending|anim/i.test(cls)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Finds workflow rows and injects "Notify me" buttons.
+ *
+ * Shows the button for:
+ *   - Rows detected as running/queued (multi-strategy detection)
+ *   - Rows whose run ID is in watchedRuns storage (persists across reloads)
  */
 function enhanceWorkflowNotifications() {
   if (!isActionsPage()) return;
   if (!featureToggles.notifications) return;
 
-  const runningRows = new Set();
-
-  RUNNING_ROW_SELECTORS.forEach(sel => {
-    document.querySelectorAll(sel).forEach(indicator => {
-      let row = indicator.closest('[data-run-id], li, tr, .Box-row, article');
-      if (row) runningRows.add(row);
-    });
-  });
-
-  runningRows.forEach(row => {
-    if (row.getAttribute(PROCESSED_ATTR + '-notify')) return;
-    row.setAttribute(PROCESSED_ATTR + '-notify', 'true');
-
-    const runLink = row.querySelector('a[href*="/actions/runs/"]');
-    if (!runLink) return;
-
-    const runUrl = runLink.href;
-    const parsed = parseWorkflowRunUrl(runUrl);
+  // Gather all rows that have workflow run links
+  const allRunRows = new Map(); // runId → { row, runUrl, parsed }
+  document.querySelectorAll('a[href*="/actions/runs/"]').forEach(link => {
+    const parsed = parseWorkflowRunUrl(link.href);
     if (!parsed) return;
-
-    const notifyBtn = createNotifyButton(parsed.runId, runUrl);
-
-    const statusIndicator = row.querySelector(RUNNING_ROW_SELECTORS.join(','));
-    if (statusIndicator) {
-      statusIndicator.closest('span, div, td')?.insertAdjacentElement('afterend', notifyBtn)
-        ?? statusIndicator.insertAdjacentElement('afterend', notifyBtn);
-    } else {
-      runLink.insertAdjacentElement('afterend', notifyBtn);
+    // Walk up to find the row container — try broad selectors
+    const row = link.closest('[data-run-id], li, tr, .Box-row, article, div.Box-row, [class*="WorkflowRun"]')
+             || link.parentElement?.closest('div, li');
+    if (row && !allRunRows.has(parsed.runId)) {
+      allRunRows.set(parsed.runId, { row, runUrl: link.href, parsed });
     }
   });
+
+  // Check storage for watched runs, then inject buttons
+  chrome.storage.local.get('watchedRuns', (data) => {
+    const watched = data.watchedRuns || {};
+
+    allRunRows.forEach(({ row, runUrl, parsed }, runId) => {
+      // Skip if already has a notify button (handles DOM re-render)
+      if (row.querySelector('.gh-enhancer-notify-btn')) return;
+
+      const running = isRowRunning(row);
+      const isWatched = !!watched[runId];
+
+      if (!running && !isWatched) return;
+
+      const notifyBtn = createNotifyButton(parsed.runId, runUrl);
+
+      // Insert button after the run link
+      const runLink = row.querySelector('a[href*="/actions/runs/"]');
+      if (runLink) {
+        runLink.insertAdjacentElement('afterend', notifyBtn);
+      }
+    });
+  });
+}
+
+/**
+ * On a workflow run detail page (/actions/runs/{id}), injects a notify button
+ * into the page header so the user can register for completion notification
+ * right after triggering a workflow.
+ */
+function enhanceWorkflowRunDetailPage() {
+  if (!featureToggles.notifications) return;
+
+  // Only run on workflow run detail pages: /owner/repo/actions/runs/12345
+  const parsed = parseWorkflowRunUrl(location.href);
+  if (!parsed) return;
+
+  // Don't add if already present
+  if (document.querySelector('.gh-enhancer-detail-notify')) return;
+
+  // Detect if the run is still in progress (not completed)
+  const pageText = (document.body.textContent || '').toLowerCase();
+  const completedKeywords = ['completed', 'success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
+  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
+  const isCompleted = completedKeywords.some(kw => pageText.includes(kw))
+                   && !runningKeywords.some(kw => pageText.includes(kw));
+
+  // Also show if already watched
+  chrome.storage.local.get('watchedRuns', (data) => {
+    const watched = data.watchedRuns || {};
+    const isWatched = !!watched[parsed.runId];
+
+    if (isCompleted && !isWatched) return;
+    if (document.querySelector('.gh-enhancer-detail-notify')) return;
+
+    const notifyBtn = createNotifyButton(parsed.runId, location.href);
+    notifyBtn.classList.add('gh-enhancer-detail-notify');
+    notifyBtn.style.cssText = 'font-size:13px;padding:4px 12px;margin-left:8px;vertical-align:middle;';
+
+    // Insert next to the run name heading.
+    // The run name is typically in an <h1> on the detail page.
+    // We look for the most specific run-name element first,
+    // then fall back to the page heading.
+    const runNameCandidates = [
+      // Run name span/link inside header
+      'h1 .markdown-title',
+      'h1 a',
+      'h1 span.css-truncate-target',
+      'h1 span',
+      'h1',
+    ];
+    for (const sel of runNameCandidates) {
+      const el = document.querySelector(sel);
+      if (el) {
+        el.insertAdjacentElement('afterend', notifyBtn);
+        return;
+      }
+    }
+  });
+}
+
+// ─── Completion toast notification (received from background.js) ────────────
+
+/**
+ * Listens for WORKFLOW_COMPLETED messages from the background script
+ * and shows an in-page toast notification.
+ */
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'WORKFLOW_COMPLETED') {
+    showCompletionToast(message.data);
+    disableNotifyButton(message.data.runId);
+  }
+});
+
+/**
+ * Finds all notify buttons for the given run ID and sets them to
+ * a disabled "通知完了" state.
+ */
+function disableNotifyButton(runId) {
+  document.querySelectorAll(`.gh-enhancer-notify-btn[data-run-id="${runId}"]`).forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove('active');
+    btn.classList.add('completed');
+    btn.title = 'ワークフロー完了 — 通知済み';
+    const checkIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
+      <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+    </svg>`;
+    btn.innerHTML = `${checkIcon}通知完了`;
+  });
+}
+
+/**
+ * Shows a toast notification in the bottom-right corner of the page
+ * when a watched workflow completes.
+ */
+function showCompletionToast(data) {
+  const { workflowName, branchName, conclusion, runUrl, owner, repo } = data;
+
+  // Ensure toast container exists
+  let container = document.getElementById('gh-enhancer-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'gh-enhancer-toast-container';
+    document.body.appendChild(container);
+  }
+
+  const isSuccess = conclusion === 'success';
+  const isCancelled = conclusion === 'cancelled';
+  const icon = isSuccess ? '✅' : isCancelled ? '⚠️' : '❌';
+  const conclusionLabel = {
+    success: '成功', failure: '失敗', cancelled: 'キャンセル',
+    timed_out: 'タイムアウト', skipped: 'スキップ',
+  }[conclusion] ?? conclusion;
+
+  const statusClass = isSuccess ? 'success' : isCancelled ? 'warning' : 'error';
+
+  const toast = document.createElement('div');
+  toast.className = `gh-enhancer-toast gh-enhancer-toast-${statusClass}`;
+  toast.innerHTML = `
+    <div class="gh-enhancer-toast-header">
+      <span class="gh-enhancer-toast-icon">${icon}</span>
+      <strong class="gh-enhancer-toast-title">ワークフロー完了</strong>
+      <button class="gh-enhancer-toast-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="gh-enhancer-toast-body">
+      <div class="gh-enhancer-toast-workflow">${workflowName ?? 'Workflow'}</div>
+      ${branchName ? `<div class="gh-enhancer-toast-branch">ブランチ: ${branchName}</div>` : ''}
+      <div class="gh-enhancer-toast-result">結果: ${conclusionLabel}</div>
+      <div class="gh-enhancer-toast-repo">${owner}/${repo}</div>
+    </div>
+    <a class="gh-enhancer-toast-link" href="${runUrl}" target="_blank">詳細を見る →</a>
+  `;
+
+  // Close button
+  toast.querySelector('.gh-enhancer-toast-close').addEventListener('click', () => {
+    toast.classList.add('gh-enhancer-toast-hide');
+    toast.addEventListener('transitionend', () => toast.remove());
+  });
+
+  container.appendChild(toast);
+
+  // Auto-dismiss after 15 seconds
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.classList.add('gh-enhancer-toast-hide');
+      toast.addEventListener('transitionend', () => toast.remove());
+    }
+  }, 15000);
 }
 
 // ─── MutationObserver: re-run on DOM changes (GitHub SPA) ────────────────────
@@ -475,6 +689,7 @@ function enhanceWorkflowNotifications() {
 function runAllEnhancements() {
   enhanceBranchNames();
   enhanceWorkflowNotifications();
+  enhanceWorkflowRunDetailPage();
 }
 
 const observer = new MutationObserver(() => {

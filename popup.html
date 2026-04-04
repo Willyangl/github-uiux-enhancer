@@ -154,6 +154,11 @@
 
     /* ─── Feature toggle switches ────────────────────────── */
 
+    .feature-group {
+      border-bottom: 1px solid #f6f8fa;
+      padding-bottom: 2px;
+    }
+
     .feature-item {
       display: flex;
       align-items: center;
@@ -162,6 +167,7 @@
       border-bottom: 1px solid #f6f8fa;
     }
 
+    .feature-item.no-border,
     .feature-item:last-child {
       border-bottom: none;
     }
@@ -312,17 +318,19 @@
   <div class="section">
     <div class="section-title">機能スイッチ</div>
 
-    <div class="feature-item">
-      <span class="feature-label">ブランチ選択プルダウンの幅を拡大</span>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-widenDropdown" checked />
-        <span class="toggle-slider"></span>
-      </label>
-    </div>
-    <div class="feature-sub-setting" id="dropdown-char-setting">
-      <label for="dropdown-char-count">表示文字数:</label>
-      <input type="number" id="dropdown-char-count" min="20" max="120" value="50" />
-      <span class="unit">文字</span>
+    <div class="feature-group">
+      <div class="feature-item no-border">
+        <span class="feature-label">ブランチ選択プルダウンの幅を拡大</span>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-widenDropdown" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="feature-sub-setting" id="dropdown-char-setting">
+        <label for="dropdown-char-count">表示文字数:</label>
+        <input type="number" id="dropdown-char-count" min="20" max="120" value="50" />
+        <span class="unit">文字</span>
+      </div>
     </div>
 
     <div class="feature-item">
