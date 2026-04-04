@@ -571,18 +571,24 @@ function enhanceWorkflowRunDetailPage() {
 
     const notifyBtn = createNotifyButton(parsed.runId, location.href);
     notifyBtn.classList.add('gh-enhancer-detail-notify');
-    // Make it more prominent on the detail page
-    notifyBtn.style.cssText = 'font-size:13px;padding:4px 12px;margin-left:8px;';
+    notifyBtn.style.cssText = 'font-size:13px;padding:4px 12px;margin-left:8px;vertical-align:middle;';
 
-    // Insert into the page header — look for the heading area
-    const headerCandidates = [
-      'h1', '.PageHeader', '[class*="PageHeader"]',
-      '.gh-header-title', '.js-issue-title',
+    // Insert next to the run name heading.
+    // The run name is typically in an <h1> on the detail page.
+    // We look for the most specific run-name element first,
+    // then fall back to the page heading.
+    const runNameCandidates = [
+      // Run name span/link inside header
+      'h1 .markdown-title',
+      'h1 a',
+      'h1 span.css-truncate-target',
+      'h1 span',
+      'h1',
     ];
-    for (const sel of headerCandidates) {
-      const header = document.querySelector(sel);
-      if (header) {
-        header.appendChild(notifyBtn);
+    for (const sel of runNameCandidates) {
+      const el = document.querySelector(sel);
+      if (el) {
+        el.insertAdjacentElement('afterend', notifyBtn);
         return;
       }
     }
