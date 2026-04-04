@@ -24,6 +24,10 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'START_POLLING') {
     ensureAlarm();
   }
+  // Content script detected completion via DOM — trigger immediate poll
+  if (message.type === 'RUN_COMPLETED_ON_PAGE') {
+    pollWatchedRuns();
+  }
 });
 
 async function ensureAlarm() {
@@ -98,7 +102,11 @@ async function pollWatchedRuns() {
   const watchedRuns = data.watchedRuns || {};
   const token = data.githubToken;
 
-  if (!token || Object.keys(watchedRuns).length === 0) return;
+  if (!token || Object.keys(watchedRuns).length === 0) {
+    // No runs to watch — stop the alarm to save resources
+    chrome.alarms.clear(ALARM_NAME);
+    return;
+  }
 
   const headers = {
     'Authorization': `Bearer ${token}`,

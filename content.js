@@ -658,7 +658,36 @@ function showCompletionToast(data) {
   }, 15000);
 }
 
-// ─── MutationObserver with debounce ──────────────────────────────────────────
+// ─── Instant workflow completion detection via DOM ───────────────────────────
+// When the user is on a workflow detail page, detect status changes in the DOM
+// and notify immediately instead of waiting for the next API poll cycle.
+
+let lastKnownDetailStatus = null;
+
+function detectWorkflowCompletionOnPage() {
+  if (!featureToggles.notifications) return;
+  const parsed = parseWorkflowRunUrl(location.href);
+  if (!parsed) return;
+
+  const pageText = (document.body.textContent || '').toLowerCase();
+  const completedKeywords = ['success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
+  const isNowCompleted = completedKeywords.some(kw => pageText.includes(kw));
+
+  if (isNowCompleted && lastKnownDetailStatus === 'running') {
+    // Page just transitioned from running → completed
+    // Tell background to poll immediately instead of waiting up to 60s
+    safeSendMessage({ type: 'RUN_COMPLETED_ON_PAGE' });
+  }
+
+  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending'];
+  if (runningKeywords.some(kw => pageText.includes(kw))) {
+    lastKnownDetailStatus = 'running';
+  } else if (isNowCompleted) {
+    lastKnownDetailStatus = 'completed';
+  }
+}
+
+// ─── MutationObserver with debounce & filtering ─────────────────────────────
 
 function runAllEnhancements() {
   enhanceBranchNames();
@@ -667,12 +696,24 @@ function runAllEnhancements() {
 }
 
 let debounceTimer = null;
-const observer = new MutationObserver(() => {
+const observer = new MutationObserver((mutations) => {
   if (!isContextValid() || !settingsReady) return;
+
+  // Quick filter: skip if only text/attribute changes in irrelevant nodes
+  let hasRelevantChange = false;
+  for (const m of mutations) {
+    if (m.addedNodes.length > 0 || m.removedNodes.length > 0) {
+      hasRelevantChange = true;
+      break;
+    }
+  }
+  if (!hasRelevantChange) return;
+
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     runAllEnhancements();
     widenBranchDropdowns();
+    detectWorkflowCompletionOnPage();
   }, DEBOUNCE_MS);
 });
 
@@ -680,6 +721,7 @@ observer.observe(document.body, { childList: true, subtree: true });
 
 function guardedRunAll() {
   if (!settingsReady) return;
+  lastKnownDetailStatus = null; // Reset on page navigation
   runAllEnhancements();
 }
 document.addEventListener('turbo:load', guardedRunAll);
