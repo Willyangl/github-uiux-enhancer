@@ -99,12 +99,17 @@ const RUNNING_ROW_SELECTORS = [
 // ─── Settings loader ──────────────────────────────────────────────────────────
 
 function loadSettings(callback) {
-  safeStorageGet(['featureToggles', 'dropdownCharCount'], (data) => {
+  safeStorageGet(['featureToggles', 'dropdownCharCount', 'language'], async (data) => {
+    if (!data) return;
     if (data.featureToggles) {
       featureToggles = { ...featureToggles, ...data.featureToggles };
     }
     if (data.dropdownCharCount != null) {
       dropdownCharCount = data.dropdownCharCount;
+    }
+    // Load i18n with the saved language (or detect from browser)
+    if (typeof i18n !== 'undefined') {
+      await i18n.load();
     }
     if (callback) callback();
   });
@@ -359,7 +364,7 @@ function createCopyButton(branchName) {
     btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
       <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
     </svg>`;
-    showCopyTooltip(btn, success ? 'Copied!' : 'Failed to copy');
+    showCopyTooltip(btn, success ? i18n.t('content.copied') : i18n.t('content.copyFailed'));
 
     setTimeout(() => {
       btn.classList.remove('copied');
@@ -451,15 +456,15 @@ function createNotifyButton(runId, runUrl) {
     <path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Zm5-3.5A3.5 3.5 0 0 0 4.5 5v2.947c0 .346-.102.683-.294.97l-1.703 2.556a.017.017 0 0 0-.003.01l.001.006c0 .002.002.004.004.006l.006.004.007.001h10.964l.007-.001.006-.004.004-.006.001-.007a.017.017 0 0 0-.003-.01l-1.703-2.554a1.745 1.745 0 0 1-.294-.97V5A3.5 3.5 0 0 0 8 1.5Z"/>
   </svg>`;
 
-  btn.innerHTML = `${bellIcon}通知`;
+  btn.innerHTML = `${bellIcon}${i18n.t('content.notify')}`;
 
   // Check if already watching this run
   safeStorageGet('watchedRuns', (data) => {
     const watched = data.watchedRuns || {};
     if (watched[runId]) {
       btn.classList.add('active');
-      btn.title = 'Watching — will notify when complete (click to cancel)';
-      btn.innerHTML = `${bellIcon}通知中`;
+      btn.title = i18n.t('content.notifyWatching');
+      btn.innerHTML = `${bellIcon}${i18n.t('content.notifying')}`;
     }
   });
 
@@ -477,20 +482,20 @@ function createNotifyButton(runId, runUrl) {
       delete watched[runId];
       await new Promise(resolve => safeStorageSet({ watchedRuns: watched }, resolve));
       btn.classList.remove('active');
-      btn.title = 'Notify me when this workflow completes';
-      btn.innerHTML = `${bellIcon}通知`;
+      btn.title = i18n.t('content.notifyTitle');
+      btn.innerHTML = `${bellIcon}${i18n.t('content.notify')}`;
     } else {
       // Check for token
       const tokenData = await new Promise(resolve => safeStorageGet('githubToken', resolve));
       if (!tokenData) return;
       if (!tokenData.githubToken) {
-        alert('GitHub Enhancer: GitHub Personal Access Tokenを設定してください。\n拡張機能アイコンをクリックして設定画面を開いてください。');
+        alert(i18n.t('content.alertTokenRequired'));
         return;
       }
 
       const parsed = parseWorkflowRunUrl(runUrl);
       if (!parsed) {
-        alert('GitHub Enhancer: このページのワークフロー情報を取得できませんでした。');
+        alert(i18n.t('content.alertParseFailed'));
         return;
       }
 
@@ -507,8 +512,8 @@ function createNotifyButton(runId, runUrl) {
       safeSendMessage({ type: 'START_POLLING' });
 
       btn.classList.add('active');
-      btn.title = 'Watching — will notify when complete (click to cancel)';
-      btn.innerHTML = `${bellIcon}通知中`;
+      btn.title = i18n.t('content.notifyWatching');
+      btn.innerHTML = `${bellIcon}${i18n.t('content.notifying')}`;
     }
   });
 
@@ -722,11 +727,11 @@ function disableNotifyButton(runId) {
     btn.disabled = true;
     btn.classList.remove('active');
     btn.classList.add('completed');
-    btn.title = 'ワークフロー完了 — 通知済み';
+    btn.title = i18n.t('content.notifyCompleted');
     const checkIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
       <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
     </svg>`;
-    btn.innerHTML = `${checkIcon}通知完了`;
+    btn.innerHTML = `${checkIcon}${i18n.t('content.notifyDone')}`;
   });
 }
 
@@ -749,8 +754,11 @@ function showCompletionToast(data) {
   const isCancelled = conclusion === 'cancelled';
   const icon = isSuccess ? '✅' : isCancelled ? '⚠️' : '❌';
   const conclusionLabel = {
-    success: '成功', failure: '失敗', cancelled: 'キャンセル',
-    timed_out: 'タイムアウト', skipped: 'スキップ',
+    success: i18n.t('content.conclusionSuccess'),
+    failure: i18n.t('content.conclusionFailure'),
+    cancelled: i18n.t('content.conclusionCancelled'),
+    timed_out: i18n.t('content.conclusionTimedOut'),
+    skipped: i18n.t('content.conclusionSkipped'),
   }[conclusion] ?? conclusion;
 
   const statusClass = isSuccess ? 'success' : isCancelled ? 'warning' : 'error';
@@ -760,16 +768,16 @@ function showCompletionToast(data) {
   toast.innerHTML = `
     <div class="gh-enhancer-toast-header">
       <span class="gh-enhancer-toast-icon">${icon}</span>
-      <strong class="gh-enhancer-toast-title">ワークフロー完了</strong>
+      <strong class="gh-enhancer-toast-title">${i18n.t('content.toastTitle')}</strong>
       <button class="gh-enhancer-toast-close" aria-label="Close">&times;</button>
     </div>
     <div class="gh-enhancer-toast-body">
       <div class="gh-enhancer-toast-workflow">${workflowName ?? 'Workflow'}</div>
-      ${branchName ? `<div class="gh-enhancer-toast-branch">ブランチ: ${branchName}</div>` : ''}
-      <div class="gh-enhancer-toast-result">結果: ${conclusionLabel}</div>
+      ${branchName ? `<div class="gh-enhancer-toast-branch">${i18n.t('content.toastBranch', { branch: branchName })}</div>` : ''}
+      <div class="gh-enhancer-toast-result">${i18n.t('content.toastResult', { conclusion: conclusionLabel })}</div>
       <div class="gh-enhancer-toast-repo">${owner}/${repo}</div>
     </div>
-    <a class="gh-enhancer-toast-link" href="${runUrl}" target="_blank">詳細を見る →</a>
+    <a class="gh-enhancer-toast-link" href="${runUrl}" target="_blank">${i18n.t('content.toastLink')}</a>
   `;
 
   // Close button

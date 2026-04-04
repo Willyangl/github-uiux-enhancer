@@ -304,6 +304,25 @@
       color: #9a6700;
       margin-bottom: 8px;
     }
+
+    /* Language selector in header */
+    .header-lang {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .header-lang select {
+      background: #3a3f46;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 1px 4px;
+      cursor: pointer;
+      outline: none;
+    }
   </style>
 </head>
 <body>
@@ -312,29 +331,36 @@
       <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
     </svg>
     <h1>GitHub Enhancer</h1>
+    <div class="header-lang">
+      <select id="lang-select">
+        <option value="ja">日本語</option>
+        <option value="en">English</option>
+        <option value="zh">中文</option>
+      </select>
+    </div>
   </div>
 
   <!-- Feature toggles -->
   <div class="section">
-    <div class="section-title">機能スイッチ</div>
+    <div class="section-title" data-i18n="popup.featureSwitches">機能スイッチ</div>
 
     <div class="feature-group">
       <div class="feature-item no-border">
-        <span class="feature-label">ブランチ選択プルダウンの幅を拡大</span>
+        <span class="feature-label" data-i18n="popup.widenDropdown">ブランチ選択プルダウンの幅を拡大</span>
         <label class="toggle">
           <input type="checkbox" id="toggle-widenDropdown" checked />
           <span class="toggle-slider"></span>
         </label>
       </div>
       <div class="feature-sub-setting" id="dropdown-char-setting">
-        <label for="dropdown-char-count">表示文字数:</label>
+        <label for="dropdown-char-count" data-i18n="popup.charCount">表示文字数:</label>
         <input type="number" id="dropdown-char-count" min="20" max="120" value="50" />
-        <span class="unit">文字</span>
+        <span class="unit" data-i18n="popup.charUnit">文字</span>
       </div>
     </div>
 
     <div class="feature-item">
-      <span class="feature-label">Actionsワークフロー履歴のブランチ名を全表示</span>
+      <span class="feature-label" data-i18n="popup.fullBranchName">Actionsワークフロー履歴のブランチ名を全表示</span>
       <label class="toggle">
         <input type="checkbox" id="toggle-fullBranchName" checked />
         <span class="toggle-slider"></span>
@@ -342,7 +368,7 @@
     </div>
 
     <div class="feature-item">
-      <span class="feature-label">ブランチ名横にコピーボタンを表示</span>
+      <span class="feature-label" data-i18n="popup.copyButton">ブランチ名横にコピーボタンを表示</span>
       <label class="toggle">
         <input type="checkbox" id="toggle-copyButton" checked />
         <span class="toggle-slider"></span>
@@ -351,7 +377,7 @@
 
     <div class="feature-group">
       <div class="feature-item no-border">
-        <span class="feature-label">ワークフロー完了時にブラウザ通知</span>
+        <span class="feature-label" data-i18n="popup.notifications">ワークフロー完了時にブラウザ通知</span>
         <label class="toggle">
           <input type="checkbox" id="toggle-notifications" checked />
           <span class="toggle-slider"></span>
@@ -359,7 +385,7 @@
       </div>
       <div class="feature-item no-border" id="auto-notify-setting" style="padding-top:0">
         <span class="feature-label" style="font-size:11px;color:#57606a;padding-left:8px">
-          実行中WFを自動的に通知登録する
+          <span data-i18n="popup.autoNotify">実行中WFを自動的に通知登録する</span>
         </span>
         <label class="toggle">
           <input type="checkbox" id="toggle-autoNotify" />
@@ -371,30 +397,30 @@
 
   <!-- GitHub Token settings -->
   <div class="section">
-    <div class="section-title">設定</div>
+    <div class="section-title" data-i18n="popup.settings">設定</div>
     <div id="token-status"></div>
-    <label for="token-input">GitHub Personal Access Token</label>
+    <label for="token-input" data-i18n="popup.tokenLabel">GitHub Personal Access Token</label>
     <p class="hint">
-      ワークフロー完了通知に必要です。<br>
-      <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub+Enhancer" target="_blank">
-        トークンを発行する（repo スコープが必要）
-      </a>
+      <span data-i18n="popup.tokenHint">ワークフロー完了通知に必要です。</span><br>
+      <a href="https://github.com/settings/tokens/new?scopes=repo&description=GitHub+Enhancer" target="_blank"
+         data-i18n="popup.tokenLink">トークンを発行する（repo スコープが必要）</a>
     </p>
     <div class="input-row">
       <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" />
-      <button class="btn-primary" id="save-token-btn">保存</button>
+      <button class="btn-primary" id="save-token-btn" data-i18n="popup.tokenSave">保存</button>
     </div>
     <div class="status-msg" id="token-status-msg"></div>
   </div>
 
   <!-- Watched runs -->
   <div class="section">
-    <div class="section-title">通知待ちワークフロー</div>
+    <div class="section-title" data-i18n="popup.watchedTitle">通知待ちワークフロー</div>
     <div id="watched-runs-list" class="watched-runs">
-      <p class="empty-msg">通知待ちのワークフローはありません</p>
+      <p class="empty-msg" data-i18n="popup.watchedEmpty">通知待ちのワークフローはありません</p>
     </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ const saveTokenBtn = document.getElementById('save-token-btn');
 const tokenStatusMsg = document.getElementById('token-status-msg');
 const tokenStatus = document.getElementById('token-status');
 const watchedRunsList = document.getElementById('watched-runs-list');
+const langSelect = document.getElementById('lang-select');
 
 // Feature toggles
 const toggleIds = {
@@ -28,40 +29,81 @@ const DEFAULTS = {
   dropdownCharCount: 50,
 };
 
+// ─── i18n helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Applies translations to all elements with data-i18n attribute.
+ */
+function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const text = i18n.t(key);
+    if (text !== key) el.textContent = text;
+  });
+  // Also translate the placeholder
+  if (tokenInput) tokenInput.placeholder = i18n.t('popup.tokenPlaceholder');
+}
+
 // ─── Load saved state ─────────────────────────────────────────────────────────
 
-chrome.storage.local.get(['githubToken', 'watchedRuns', 'featureToggles', 'dropdownCharCount'], (data) => {
-  // Token status
-  if (data.githubToken) {
-    tokenInput.placeholder = '保存済み（変更する場合は入力してください）';
-    tokenStatus.innerHTML = `
-      <div class="token-set-indicator">
-        ✅ トークン設定済み
-      </div>`;
-  } else {
-    tokenStatus.innerHTML = `
-      <div class="token-not-set-indicator">
-        ⚠️ トークン未設定（通知機能は利用できません）
-      </div>`;
-  }
+(async () => {
+  // Load language first, then apply translations
+  const lang = await i18n.load();
+  if (langSelect) langSelect.value = lang;
+  applyTranslations();
 
-  // Feature toggles
-  const toggles = { ...DEFAULTS.featureToggles, ...(data.featureToggles || {}) };
-  Object.entries(toggleIds).forEach(([key, id]) => {
-    const el = document.getElementById(id);
-    if (el) el.checked = toggles[key];
+  chrome.storage.local.get(['githubToken', 'watchedRuns', 'featureToggles', 'dropdownCharCount'], (data) => {
+    // Token status
+    if (data.githubToken) {
+      tokenInput.placeholder = i18n.t('popup.tokenPlaceholderSaved');
+      tokenStatus.innerHTML = `
+        <div class="token-set-indicator">
+          ✅ ${i18n.t('popup.tokenSet')}
+        </div>`;
+    } else {
+      tokenStatus.innerHTML = `
+        <div class="token-not-set-indicator">
+          ⚠️ ${i18n.t('popup.tokenNotSet')}
+        </div>`;
+    }
+
+    // Feature toggles
+    const toggles = { ...DEFAULTS.featureToggles, ...(data.featureToggles || {}) };
+    Object.entries(toggleIds).forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = toggles[key];
+    });
+
+    // Dropdown char count
+    const charCount = data.dropdownCharCount ?? DEFAULTS.dropdownCharCount;
+    if (dropdownCharInput) dropdownCharInput.value = charCount;
+
+    // Show/hide sub-settings based on toggles
+    updateDropdownCharVisibility(toggles.widenDropdown);
+    updateAutoNotifyVisibility(toggles.notifications);
+
+    renderWatchedRuns(data.watchedRuns || {});
   });
+})();
 
-  // Dropdown char count
-  const charCount = data.dropdownCharCount ?? DEFAULTS.dropdownCharCount;
-  if (dropdownCharInput) dropdownCharInput.value = charCount;
+// ─── Language selector ────────────────────────────────────────────────────────
 
-  // Show/hide sub-settings based on toggles
-  updateDropdownCharVisibility(toggles.widenDropdown);
-  updateAutoNotifyVisibility(toggles.notifications);
-
-  renderWatchedRuns(data.watchedRuns || {});
-});
+if (langSelect) {
+  langSelect.addEventListener('change', async () => {
+    await i18n.setLang(langSelect.value);
+    applyTranslations();
+    // Re-render dynamic content
+    chrome.storage.local.get(['githubToken', 'watchedRuns'], (data) => {
+      if (data.githubToken) {
+        tokenInput.placeholder = i18n.t('popup.tokenPlaceholderSaved');
+        tokenStatus.innerHTML = `<div class="token-set-indicator">✅ ${i18n.t('popup.tokenSet')}</div>`;
+      } else {
+        tokenStatus.innerHTML = `<div class="token-not-set-indicator">⚠️ ${i18n.t('popup.tokenNotSet')}</div>`;
+      }
+      renderWatchedRuns(data.watchedRuns || {});
+    });
+  });
+}
 
 // ─── Feature toggle handlers ──────────────────────────────────────────────────
 
@@ -113,18 +155,18 @@ if (dropdownCharInput) {
 saveTokenBtn.addEventListener('click', async () => {
   const token = tokenInput.value.trim();
   if (!token) {
-    showStatus('トークンを入力してください', 'error');
+    showStatus(i18n.t('popup.tokenEmpty'), 'error');
     return;
   }
 
   if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
-    showStatus('有効なGitHubトークン形式ではありません', 'error');
+    showStatus(i18n.t('popup.tokenInvalid'), 'error');
     return;
   }
 
   // Verify token with GitHub API
   saveTokenBtn.disabled = true;
-  saveTokenBtn.textContent = '確認中…';
+  saveTokenBtn.textContent = i18n.t('popup.tokenSaving');
 
   try {
     const res = await fetch('https://api.github.com/user', {
@@ -138,21 +180,21 @@ saveTokenBtn.addEventListener('click', async () => {
       const user = await res.json();
       chrome.storage.local.set({ githubToken: token }, () => {
         tokenInput.value = '';
-        tokenInput.placeholder = '保存済み（変更する場合は入力してください）';
-        tokenStatus.innerHTML = `<div class="token-set-indicator">✅ トークン設定済み（${user.login}）</div>`;
-        showStatus(`保存しました（${user.login}）`, 'success');
+        tokenInput.placeholder = i18n.t('popup.tokenPlaceholderSaved');
+        tokenStatus.innerHTML = `<div class="token-set-indicator">✅ ${i18n.t('popup.tokenSetUser', { user: user.login })}</div>`;
+        showStatus(i18n.t('popup.tokenSaved', { user: user.login }), 'success');
         chrome.runtime.sendMessage({ type: 'START_POLLING' });
       });
     } else if (res.status === 401) {
-      showStatus('トークンが無効です。再確認してください', 'error');
+      showStatus(i18n.t('popup.tokenUnauthorized'), 'error');
     } else {
-      showStatus(`エラー: ${res.status}`, 'error');
+      showStatus(i18n.t('popup.tokenError', { status: res.status }), 'error');
     }
   } catch {
-    showStatus('通信エラーが発生しました', 'error');
+    showStatus(i18n.t('popup.tokenNetworkError'), 'error');
   } finally {
     saveTokenBtn.disabled = false;
-    saveTokenBtn.textContent = '保存';
+    saveTokenBtn.textContent = i18n.t('popup.tokenSave');
   }
 });
 
@@ -167,7 +209,7 @@ function renderWatchedRuns(watchedRuns) {
   const runs = Object.values(watchedRuns);
 
   if (runs.length === 0) {
-    watchedRunsList.innerHTML = '<p class="empty-msg">通知待ちのワークフローはありません</p>';
+    watchedRunsList.innerHTML = `<p class="empty-msg">${i18n.t('popup.watchedEmpty')}</p>`;
     return;
   }
 
@@ -186,7 +228,7 @@ function renderWatchedRuns(watchedRuns) {
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-danger';
     removeBtn.style.cssText = 'padding:2px 6px;font-size:11px;flex-shrink:0;margin-left:6px';
-    removeBtn.textContent = '解除';
+    removeBtn.textContent = i18n.t('popup.watchedRemove');
     removeBtn.addEventListener('click', () => {
       chrome.storage.local.get('watchedRuns', (data) => {
         const watched = data.watchedRuns || {};
