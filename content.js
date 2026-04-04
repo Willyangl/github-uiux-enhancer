@@ -598,8 +598,26 @@ function enhanceWorkflowRunDetailPage() {
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'WORKFLOW_COMPLETED') {
     showCompletionToast(message.data);
+    disableNotifyButton(message.data.runId);
   }
 });
+
+/**
+ * Finds all notify buttons for the given run ID and sets them to
+ * a disabled "通知完了" state.
+ */
+function disableNotifyButton(runId) {
+  document.querySelectorAll(`.gh-enhancer-notify-btn[data-run-id="${runId}"]`).forEach(btn => {
+    btn.disabled = true;
+    btn.classList.remove('active');
+    btn.classList.add('completed');
+    btn.title = 'ワークフロー完了 — 通知済み';
+    const checkIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
+      <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
+    </svg>`;
+    btn.innerHTML = `${checkIcon}通知完了`;
+  });
+}
 
 /**
  * Shows a toast notification in the bottom-right corner of the page

@@ -157,6 +157,20 @@
   background-color: #b6e3ff;
 }
 
+.gh-enhancer-notify-btn.completed {
+  color: #1a7f37;
+  border-color: #d0d7de;
+  background-color: #dafbe1;
+  opacity: 0.8;
+  cursor: default;
+}
+
+.gh-enhancer-notify-btn.completed:hover {
+  background-color: #dafbe1;
+  color: #1a7f37;
+  border-color: #d0d7de;
+}
+
 /* =====================================================
    Completion toast notification
    ===================================================== */
