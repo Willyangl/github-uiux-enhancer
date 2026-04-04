@@ -51,7 +51,7 @@
     "conclusionTimedOut": "超时",
     "conclusionSkipped": "已跳过",
     "rerun": "重新运行",
-    "rerunTitle": "在相同分支上运行新的工作流",
+    "rerunTitle": "使用相同参数重新运行工作流",
     "rerunning": "运行中…",
     "rerunDone": "已触发",
     "rerunFailed": "运行失败"

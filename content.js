@@ -640,7 +640,9 @@ function enhanceWorkflowNotifications() {
 // ─── Feature 5: Re-run workflow with same parameters ─────────────────────────
 
 /**
- * Creates a "re-run" button that triggers the same workflow on the same branch.
+ * Creates a "re-run" button that re-runs the exact same workflow run
+ * with all original parameters (branch, commit, inputs) preserved.
+ * Uses POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun
  */
 function createRerunButton(runUrl, parsed) {
   const btn = document.createElement('button');
@@ -676,25 +678,13 @@ function createRerunButton(runUrl, parsed) {
         'X-GitHub-Api-Version': '2022-11-28',
       };
 
-      // Fetch original run details to get workflow_id and branch
-      const runRes = await fetch(
-        `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/actions/runs/${parsed.runId}`,
-        { headers }
-      );
-      if (!runRes.ok) throw new Error(`API error: ${runRes.status}`);
-      const runData = await runRes.json();
-
-      // Dispatch new workflow run on the same branch
-      const dispatchRes = await fetch(
-        `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/actions/workflows/${runData.workflow_id}/dispatches`,
-        {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ref: runData.head_branch }),
-        }
+      // Re-run the exact same workflow run (preserves branch, commit, inputs)
+      const rerunRes = await fetch(
+        `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/actions/runs/${parsed.runId}/rerun`,
+        { method: 'POST', headers }
       );
 
-      if (dispatchRes.status === 204) {
+      if (rerunRes.status === 201) {
         btn.innerHTML = `${rerunIcon}${i18n.t('content.rerunDone')}`;
         btn.classList.add('rerun-success');
         showCopyTooltip(btn, i18n.t('content.rerunDone'));

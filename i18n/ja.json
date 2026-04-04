@@ -51,7 +51,7 @@
     "conclusionTimedOut": "タイムアウト",
     "conclusionSkipped": "スキップ",
     "rerun": "再実行",
-    "rerunTitle": "同じブランチで新規ワークフローを実行",
+    "rerunTitle": "同じパラメータでワークフローを再実行",
     "rerunning": "実行中…",
     "rerunDone": "実行しました",
     "rerunFailed": "実行失敗"

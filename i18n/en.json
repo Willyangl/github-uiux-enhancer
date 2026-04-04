@@ -51,7 +51,7 @@
     "conclusionTimedOut": "Timed out",
     "conclusionSkipped": "Skipped",
     "rerun": "Re-run",
-    "rerunTitle": "Run a new workflow on the same branch",
+    "rerunTitle": "Re-run workflow with the same parameters",
     "rerunning": "Running…",
     "rerunDone": "Dispatched",
     "rerunFailed": "Failed"
