@@ -99,6 +99,7 @@ function createChromeMock() {
     onInstalled: {
       addListener(fn) { /* store but don't auto-fire */ },
     },
+    getURL(path) { return `chrome-extension://mock-id/${path}`; },
   };
 
   const createdTabs = [];

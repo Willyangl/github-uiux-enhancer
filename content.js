@@ -10,9 +10,6 @@
 'use strict';
 
 // ─── Extension context guard ──────────────────────────────────────────────────
-// After the extension is reloaded/updated, old content scripts remain in the
-// page but their chrome.* APIs throw "Extension context invalidated".
-// We detect this and stop all processing.
 
 let contextValid = true;
 
@@ -22,48 +19,41 @@ function isContextValid() {
     return true;
   } catch {
     contextValid = false;
-    // Disconnect observer to stop further processing
     if (typeof observer !== 'undefined') observer.disconnect();
+    cleanupListeners();
     return false;
   }
 }
 
-/**
- * Safe wrapper for chrome.storage.local.get that silently fails
- * when the extension context has been invalidated.
- */
 function safeStorageGet(keys, callback) {
   if (!isContextValid()) return;
-  try {
-    chrome.storage.local.get(keys, callback);
-  } catch { contextValid = false; }
+  try { chrome.storage.local.get(keys, callback); }
+  catch { contextValid = false; }
 }
 
-/**
- * Safe wrapper for chrome.storage.local.set.
- */
 function safeStorageSet(items, callback) {
   if (!isContextValid()) return;
-  try {
-    chrome.storage.local.set(items, callback);
-  } catch { contextValid = false; }
+  try { chrome.storage.local.set(items, callback); }
+  catch { contextValid = false; }
 }
 
-/**
- * Safe wrapper for chrome.runtime.sendMessage.
- */
 function safeSendMessage(msg) {
   if (!isContextValid()) return;
-  try {
-    chrome.runtime.sendMessage(msg);
-  } catch { contextValid = false; }
+  try { chrome.runtime.sendMessage(msg); }
+  catch { contextValid = false; }
 }
 
 // ─── Constants & State ────────────────────────────────────────────────────────
 
 const PROCESSED_ATTR = 'data-gh-enhancer';
+const DEBOUNCE_MS = 150;          // MutationObserver debounce delay
+const DROPDOWN_RETRY_DELAYS = [100, 300, 600]; // Primer portal render retries
 
-// Default settings — overridden by chrome.storage values
+// SVG icon constants (avoid duplication and innerHTML XSS surface)
+const ICON_COPY = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>`;
+const ICON_CHECK = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>`;
+const ICON_BELL = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px"><path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Zm5-3.5A3.5 3.5 0 0 0 4.5 5v2.947c0 .346-.102.683-.294.97l-1.703 2.556a.017.017 0 0 0-.003.01l.001.006c0 .002.002.004.004.006l.006.004.007.001h10.964l.007-.001.006-.004.004-.006.001-.007a.017.017 0 0 0-.003-.01l-1.703-2.554a1.745 1.745 0 0 1-.294-.97V5A3.5 3.5 0 0 0 8 1.5Z"/></svg>`;
+
 let featureToggles = {
   widenDropdown: true,
   fullBranchName: true,
@@ -71,36 +61,27 @@ let featureToggles = {
   notifications: true,
   autoNotify: false,
 };
-let dropdownCharCount = 50; // characters visible in dropdown
-let settingsReady = false;  // true after loadSettings (incl. i18n) completes
+let dropdownCharCount = 50;
+let settingsReady = false;
 
-// Selectors for branch name elements in Actions workflow run rows.
 const BRANCH_LINK_SELECTORS = [
-  'a.branch-name',
-  'span.branch-name',
-  '[data-component="branch-name"]',
-  '.WorkflowRunBranch a',
-  '.workflow-run__branch a',
-  'svg.octicon-git-branch ~ a',
-  'svg.octicon-git-branch + span a',
+  'a.branch-name', 'span.branch-name', '[data-component="branch-name"]',
+  '.WorkflowRunBranch a', '.workflow-run__branch a',
+  'svg.octicon-git-branch ~ a', 'svg.octicon-git-branch + span a',
   'td .branch-name',
-  '[data-testid="workflow-run-branch"] a',
-  '[data-testid="workflow-run-branch"] span',
+  '[data-testid="workflow-run-branch"] a', '[data-testid="workflow-run-branch"] span',
 ];
 
-// Selectors to identify running workflow rows
 const RUNNING_ROW_SELECTORS = [
-  '[aria-label="In progress"]',
-  '[aria-label="Queued"]',
-  'svg.octicon-dot-fill',
-  '.workflow-run-status--in_progress',
+  '[aria-label="In progress"]', '[aria-label="Queued"]',
+  'svg.octicon-dot-fill', '.workflow-run-status--in_progress',
   '[data-testid="workflow-run-status-in-progress"]',
 ];
 
 // ─── Settings loader ──────────────────────────────────────────────────────────
 
 function loadSettings(callback) {
-  safeStorageGet(['featureToggles', 'dropdownCharCount', 'language'], async (data) => {
+  safeStorageGet(['featureToggles', 'dropdownCharCount'], async (data) => {
     if (!data) return;
     if (data.featureToggles) {
       featureToggles = { ...featureToggles, ...data.featureToggles };
@@ -108,7 +89,6 @@ function loadSettings(callback) {
     if (data.dropdownCharCount != null) {
       dropdownCharCount = data.dropdownCharCount;
     }
-    // Load i18n with the saved language (or detect from browser)
     if (typeof i18n !== 'undefined') {
       await i18n.load();
     }
@@ -117,11 +97,9 @@ function loadSettings(callback) {
   });
 }
 
-// React to settings changes from popup in real-time
 chrome.storage.onChanged.addListener((changes) => {
   if (!isContextValid()) return;
   let needsRerun = false;
-
   if (changes.featureToggles) {
     featureToggles = { ...featureToggles, ...changes.featureToggles.newValue };
     needsRerun = true;
@@ -130,9 +108,7 @@ chrome.storage.onChanged.addListener((changes) => {
     dropdownCharCount = changes.dropdownCharCount.newValue;
     needsRerun = true;
   }
-
   if (needsRerun) {
-    // Re-apply dropdown widths if char count changed
     reapplyDropdownWidths();
     runAllEnhancements();
   }
@@ -140,56 +116,29 @@ chrome.storage.onChanged.addListener((changes) => {
 
 // ─── Feature 1: Widen branch dropdowns ────────────────────────────────────────
 
-/**
- * Calculates the dropdown width in px from the character count.
- * Uses approximately 7.5px per character (GitHub's monospace-ish font).
- * Adds padding for the dropdown chrome (icon + padding ~40px).
- */
 function calcDropdownWidth() {
   return Math.round(dropdownCharCount * 7.5) + 40;
 }
 
-/**
- * Finds branch selector dropdowns and widens them based on the configured
- * character count. Supports both legacy SelectMenu and modern Primer
- * SelectPanel/Overlay (portal-rendered).
- */
 function widenBranchDropdowns() {
   if (!featureToggles.widenDropdown) return;
-
   const width = calcDropdownWidth();
 
-  // --- Legacy selectors (older GitHub UI) ---
-  const legacySelectors = [
-    '.branch-select-menu .SelectMenu-modal',
-    '.js-branch-select-menu .SelectMenu-modal',
-    '[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal',
-    'details[open] .SelectMenu-modal',
-  ];
-
-  legacySelectors.forEach(selector => {
-    document.querySelectorAll(selector).forEach(modal => {
-      applyWidth(modal, width);
-    });
+  ['.branch-select-menu .SelectMenu-modal',
+   '.js-branch-select-menu .SelectMenu-modal',
+   '[data-target="branch-filter.repositoryBranchSelectMenu"] .SelectMenu-modal',
+   'details[open] .SelectMenu-modal',
+  ].forEach(sel => {
+    document.querySelectorAll(sel).forEach(modal => applyWidth(modal, width));
   });
 
-  // --- Modern Primer SelectPanel / Overlay (portal-rendered) ---
-  // GitHub's branch picker now uses React portals: the overlay is rendered
-  // at the top level of the DOM, not inside the branch button.
-  // We detect it by looking for overlays that contain branch-related content.
-  findBranchOverlays().forEach(overlay => {
-    applyWidth(overlay, width);
-  });
+  findBranchOverlays().forEach(overlay => applyWidth(overlay, width));
 
-  // Also widen filter inputs inside dropdowns
   document.querySelectorAll('.SelectMenu-filter input').forEach(input => {
     input.style.setProperty('width', '100%', 'important');
   });
 }
 
-/**
- * Applies width to a modal/overlay element if not already processed.
- */
 function applyWidth(el, width) {
   if (el.getAttribute(PROCESSED_ATTR) === 'widened') return;
   el.style.setProperty('width', `${width}px`, 'important');
@@ -197,46 +146,24 @@ function applyWidth(el, width) {
   el.setAttribute(PROCESSED_ATTR, 'widened');
 }
 
-/**
- * Finds modern Primer-based branch picker overlays.
- * These are rendered via React portals and can be detected by:
- *   - Containing "Switch branches/tags" or branch filter text
- *   - Having [data-target="ref-selector"] or similar data attributes
- *   - Being an Overlay/dialog near an anchored trigger
- */
 function findBranchOverlays() {
   const overlays = [];
-
-  // Strategy 1: Find overlays/dialogs containing branch-related headings
   const branchKeywords = ['switch branches', 'switch branches/tags', 'choose a branch'];
+
   document.querySelectorAll(
-    '[role="dialog"], .Overlay, .Overlay-body, .SelectPanel, ' +
-    '[data-testid="SelectPanel"], [class*="Overlay"]'
+    '[role="dialog"], .Overlay, .Overlay-body, .SelectPanel, [data-testid="SelectPanel"], [class*="Overlay"]'
   ).forEach(el => {
     const text = (el.textContent || '').toLowerCase();
     if (branchKeywords.some(kw => text.includes(kw))) {
-      // Find the outermost overlay container with a constrained width
-      const container = el.closest('[class*="Overlay"]') || el;
-      overlays.push(container);
+      overlays.push(el.closest('[class*="Overlay"]') || el);
     }
   });
 
-  // Strategy 2: Find the ref-selector component overlays
-  document.querySelectorAll(
-    'ref-selector, [data-target*="ref-selector"], [data-action*="ref-selector"]'
-  ).forEach(el => {
-    const overlay = el.closest('[class*="Overlay"]') ||
-                    el.closest('[role="dialog"]') ||
-                    el.closest('.SelectMenu-modal') ||
-                    el;
-    overlays.push(overlay);
+  document.querySelectorAll('ref-selector, [data-target*="ref-selector"], [data-action*="ref-selector"]').forEach(el => {
+    overlays.push(el.closest('[class*="Overlay"]') || el.closest('[role="dialog"]') || el.closest('.SelectMenu-modal') || el);
   });
 
-  // Strategy 3: Direct class patterns from Primer Overlay
-  document.querySelectorAll(
-    '.Overlay--size-small-portrait, .Overlay--size-medium, ' +
-    '.Overlay--size-auto, [class*="Box--overlay"]'
-  ).forEach(el => {
+  document.querySelectorAll('.Overlay--size-small-portrait, .Overlay--size-medium, .Overlay--size-auto, [class*="Box--overlay"]').forEach(el => {
     const text = (el.textContent || '').toLowerCase();
     if (text.includes('branch') || text.includes('tag') || text.includes('find or create')) {
       overlays.push(el);
@@ -246,82 +173,74 @@ function findBranchOverlays() {
   return [...new Set(overlays)];
 }
 
-/**
- * Re-applies dropdown width to already-processed modals when the
- * character count setting changes.
- */
 function reapplyDropdownWidths() {
   if (!featureToggles.widenDropdown) return;
-
   const width = calcDropdownWidth();
   document.querySelectorAll(`[${PROCESSED_ATTR}="widened"]`).forEach(modal => {
     modal.style.setProperty('width', `${width}px`, 'important');
   });
 }
 
-// Watch for dropdowns being opened (details element toggles)
-document.addEventListener('toggle', (e) => {
+// Event listeners (stored for cleanup on context invalidation)
+function onToggle(e) {
   if (e.target && e.target.tagName === 'DETAILS') {
-    setTimeout(widenBranchDropdowns, 50);
+    setTimeout(widenBranchDropdowns, DROPDOWN_RETRY_DELAYS[0]);
   }
-}, true);
+}
 
-// Watch click events on branch selector buttons (both legacy and modern Primer UI).
-// Modern GitHub uses <button> with branch icon or branch name text for the trigger.
-document.addEventListener('click', (e) => {
+function onClick(e) {
   const btn = e.target.closest(
-    // Legacy selectors
     'summary[aria-label*="ranch"], .branch-select-menu summary, button[aria-label*="ranch"], ' +
-    // Modern Primer branch picker trigger button
     '[data-hotkey="w"], #branch-picker-repos-header-ref-selector, ' +
     'button[id*="branch"], button[id*="ref-selector"], ' +
     '[class*="BranchName"], [class*="branch-name"]'
   );
   if (btn) {
-    // The Primer overlay renders asynchronously via React portal,
-    // so we retry a few times with increasing delays.
-    setTimeout(widenBranchDropdowns, 100);
-    setTimeout(widenBranchDropdowns, 300);
-    setTimeout(widenBranchDropdowns, 600);
+    DROPDOWN_RETRY_DELAYS.forEach(ms => setTimeout(widenBranchDropdowns, ms));
   }
-}, true);
+}
+
+document.addEventListener('toggle', onToggle, true);
+document.addEventListener('click', onClick, true);
 
 // ─── Feature 2 & 3: Full branch names + copy buttons ─────────────────────────
 
-/**
- * Returns true if the current page is a GitHub Actions runs list page.
- */
+/** Strict Actions page detection: /owner/repo/actions or /owner/repo/actions/... */
 function isActionsPage() {
-  return /\/actions(\/workflows\/[^/]+)?(\?|$)/.test(location.pathname) ||
-         location.pathname.includes('/actions');
+  return /^\/[^/]+\/[^/]+\/actions(\/|$)/.test(location.pathname);
 }
 
-/**
- * Extracts the branch name text from an element, stripping leading/trailing whitespace.
- */
 function getBranchText(el) {
   return (el.textContent || el.innerText || '').trim();
 }
 
 /**
- * Shows a tooltip bubble above the target element, then fades out.
+ * Shows a tooltip bubble above the target element, clamped within viewport.
  */
 function showCopyTooltip(target, text) {
-  // Remove any existing tooltip
   const prev = document.querySelector('.gh-enhancer-tooltip');
   if (prev) prev.remove();
 
   const tip = document.createElement('div');
   tip.className = 'gh-enhancer-tooltip';
+  tip.setAttribute('role', 'status');
+  tip.setAttribute('aria-live', 'polite');
   tip.textContent = text;
   document.body.appendChild(tip);
 
-  // Position above the target button
   const rect = target.getBoundingClientRect();
-  tip.style.top = `${window.scrollY + rect.top - tip.offsetHeight - 6}px`;
-  tip.style.left = `${window.scrollX + rect.left + rect.width / 2 - tip.offsetWidth / 2}px`;
+  let top = window.scrollY + rect.top - tip.offsetHeight - 6;
+  let left = window.scrollX + rect.left + rect.width / 2 - tip.offsetWidth / 2;
 
-  // Fade out and remove after delay
+  // Clamp within viewport
+  if (top < window.scrollY) top = window.scrollY + rect.bottom + 6;
+  if (left < 0) left = 4;
+  const maxLeft = document.documentElement.clientWidth - tip.offsetWidth - 4;
+  if (left > maxLeft) left = maxLeft;
+
+  tip.style.top = `${top}px`;
+  tip.style.left = `${left}px`;
+
   setTimeout(() => {
     tip.classList.add('gh-enhancer-tooltip-hide');
     tip.addEventListener('transitionend', () => tip.remove());
@@ -329,17 +248,50 @@ function showCopyTooltip(target, text) {
 }
 
 /**
- * Creates a copy button for a given branch name.
+ * Shows a non-blocking inline warning message (replaces alert()).
  */
+function showWarningToast(text) {
+  let container = document.getElementById('gh-enhancer-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'gh-enhancer-toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = 'gh-enhancer-toast gh-enhancer-toast-warning';
+  toast.innerHTML = '';
+
+  const body = document.createElement('div');
+  body.className = 'gh-enhancer-toast-body';
+  body.textContent = text;
+  toast.appendChild(body);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'gh-enhancer-toast-close';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.textContent = '\u00d7';
+  closeBtn.addEventListener('click', () => {
+    toast.classList.add('gh-enhancer-toast-hide');
+    toast.addEventListener('transitionend', () => toast.remove());
+  });
+  toast.insertBefore(closeBtn, toast.firstChild);
+
+  container.appendChild(toast);
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.classList.add('gh-enhancer-toast-hide');
+      toast.addEventListener('transitionend', () => toast.remove());
+    }
+  }, 8000);
+}
+
 function createCopyButton(branchName) {
   const btn = document.createElement('button');
   btn.className = 'gh-enhancer-copy-btn';
   btn.title = `Copy branch name: ${branchName}`;
   btn.setAttribute('aria-label', `Copy branch name ${branchName}`);
-  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
-    <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
-  </svg>`;
+  btn.innerHTML = ICON_COPY;
 
   btn.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -350,7 +302,6 @@ function createCopyButton(branchName) {
       await navigator.clipboard.writeText(branchName);
       success = true;
     } catch {
-      // Fallback for older browsers
       const ta = document.createElement('textarea');
       ta.value = branchName;
       ta.style.position = 'fixed';
@@ -361,30 +312,20 @@ function createCopyButton(branchName) {
       document.body.removeChild(ta);
     }
 
-    // Show checkmark icon + "Copied!" tooltip
     btn.classList.add('copied');
-    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-      <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
-    </svg>`;
+    btn.innerHTML = ICON_CHECK;
     showCopyTooltip(btn, success ? i18n.t('content.copied') : i18n.t('content.copyFailed'));
 
     setTimeout(() => {
       btn.classList.remove('copied');
       btn.title = `Copy branch name: ${branchName}`;
-      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-        <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
-        <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
-      </svg>`;
+      btn.innerHTML = ICON_COPY;
     }, 2000);
   });
 
   return btn;
 }
 
-/**
- * Finds branch name elements in the Actions workflow runs list,
- * removes truncation CSS, and adds a copy button.
- */
 function enhanceBranchNames() {
   if (!isActionsPage()) return;
 
@@ -393,7 +334,6 @@ function enhanceBranchNames() {
     document.querySelectorAll(sel).forEach(el => found.add(el));
   });
 
-  // Fallback: find all elements adjacent to git-branch octicon SVGs
   document.querySelectorAll('svg.octicon-git-branch').forEach(svg => {
     let sibling = svg.nextElementSibling;
     while (sibling) {
@@ -414,16 +354,12 @@ function enhanceBranchNames() {
   found.forEach(el => {
     if (el.getAttribute(PROCESSED_ATTR)) return;
     el.setAttribute(PROCESSED_ATTR, 'branch-enhanced');
-
     const branchName = getBranchText(el);
     if (!branchName) return;
 
-    // Feature 2: Show full branch name (auto-wrap within default width)
     if (featureToggles.fullBranchName) {
       el.classList.add('gh-enhancer-branch-name');
     }
-
-    // Feature 3: Add copy button after the element
     if (featureToggles.copyButton) {
       const copyBtn = createCopyButton(branchName);
       if (el.parentElement && !el.parentElement.querySelector('.gh-enhancer-copy-btn')) {
@@ -435,129 +371,88 @@ function enhanceBranchNames() {
 
 // ─── Feature 4: Workflow completion notifications ─────────────────────────────
 
-/**
- * Parses the current GitHub page URL to extract owner, repo, and run ID.
- * Returns null if not on a valid Actions run page.
- */
 function parseWorkflowRunUrl(url) {
   const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/);
   if (!m) return null;
   return { owner: m[1], repo: m[2], runId: m[3] };
 }
 
-/**
- * Creates a "Notify me" button for a running workflow row.
- */
 function createNotifyButton(runId, runUrl) {
   const btn = document.createElement('button');
   btn.className = 'gh-enhancer-notify-btn';
   btn.dataset.runId = runId;
   btn.title = i18n.t('content.notifyTitle');
+  btn.innerHTML = `${ICON_BELL}${i18n.t('content.notify')}`;
 
-  const bellIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
-    <path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Zm5-3.5A3.5 3.5 0 0 0 4.5 5v2.947c0 .346-.102.683-.294.97l-1.703 2.556a.017.017 0 0 0-.003.01l.001.006c0 .002.002.004.004.006l.006.004.007.001h10.964l.007-.001.006-.004.004-.006.001-.007a.017.017 0 0 0-.003-.01l-1.703-2.554a1.745 1.745 0 0 1-.294-.97V5A3.5 3.5 0 0 0 8 1.5Z"/>
-  </svg>`;
-
-  btn.innerHTML = `${bellIcon}${i18n.t('content.notify')}`;
-
-  // Check if already watching this run
   safeStorageGet('watchedRuns', (data) => {
+    if (!data) return;
     const watched = data.watchedRuns || {};
     if (watched[runId]) {
       btn.classList.add('active');
       btn.title = i18n.t('content.notifyWatching');
-      btn.innerHTML = `${bellIcon}${i18n.t('content.notifying')}`;
+      btn.innerHTML = `${ICON_BELL}${i18n.t('content.notifying')}`;
     }
   });
 
   btn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
-
     if (!isContextValid()) return;
+
     const data = await new Promise(resolve => safeStorageGet('watchedRuns', resolve));
     if (!data) return;
     const watched = data.watchedRuns || {};
 
     if (watched[runId]) {
-      // Cancel notification
       delete watched[runId];
       await new Promise(resolve => safeStorageSet({ watchedRuns: watched }, resolve));
       btn.classList.remove('active');
       btn.title = i18n.t('content.notifyTitle');
-      btn.innerHTML = `${bellIcon}${i18n.t('content.notify')}`;
+      btn.innerHTML = `${ICON_BELL}${i18n.t('content.notify')}`;
     } else {
-      // Check for token
       const tokenData = await new Promise(resolve => safeStorageGet('githubToken', resolve));
       if (!tokenData) return;
       if (!tokenData.githubToken) {
-        alert(i18n.t('content.alertTokenRequired'));
+        showWarningToast(i18n.t('content.alertTokenRequired'));
         return;
       }
-
       const parsed = parseWorkflowRunUrl(runUrl);
       if (!parsed) {
-        alert(i18n.t('content.alertParseFailed'));
+        showWarningToast(i18n.t('content.alertParseFailed'));
         return;
       }
-
       watched[runId] = {
-        owner: parsed.owner,
-        repo: parsed.repo,
-        runId,
-        runUrl,
-        addedAt: Date.now(),
+        owner: parsed.owner, repo: parsed.repo, runId, runUrl, addedAt: Date.now(),
       };
       await new Promise(resolve => safeStorageSet({ watchedRuns: watched }, resolve));
-
-      // Tell background to start polling
       safeSendMessage({ type: 'START_POLLING' });
-
       btn.classList.add('active');
       btn.title = i18n.t('content.notifyWatching');
-      btn.innerHTML = `${bellIcon}${i18n.t('content.notifying')}`;
+      btn.innerHTML = `${ICON_BELL}${i18n.t('content.notifying')}`;
     }
   });
 
   return btn;
 }
 
-/**
- * Detects whether a workflow row represents a non-completed run.
- * Uses multiple strategies since GitHub's DOM changes frequently:
- *   - Legacy status indicator selectors
- *   - Text-content-based detection ("In progress", "Queued", etc.)
- *   - Absence of completed status text
- */
 function isRowRunning(row) {
   const text = (row.textContent || '').toLowerCase();
 
-  // First check: if the row clearly shows completed status, it's NOT running.
-  // Completed rows on GitHub show a green check / red X / grey cancel icon,
-  // and display the elapsed time (e.g. "1m 7s", "20s", "2m 30s").
   const completedKeywords = ['success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out', 'completed'];
   if (completedKeywords.some(kw => text.includes(kw))) return false;
 
-  // Elapsed time pattern (e.g. "1m 7s", "20s", "3m") in the row indicates completion
+  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
+
   if (/\d+m\s*\d*s|\d+s/.test(text)) {
-    // But "in progress" rows can also show elapsed time — check for running keywords first
-    const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
     if (!runningKeywords.some(kw => text.includes(kw))) return false;
   }
 
-  // Green check / red X / cancelled SVG icons indicate completed state
   const statusIcons = row.querySelectorAll('svg.octicon-check-circle-fill, svg.octicon-x-circle-fill, svg.octicon-stop');
   if (statusIcons.length > 0) return false;
 
-  // Now check for running indicators
-  // Strategy 1: legacy selector-based detection
   if (row.querySelector(RUNNING_ROW_SELECTORS.join(','))) return true;
-
-  // Strategy 2: text-content detection
-  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
   if (runningKeywords.some(kw => text.includes(kw))) return true;
 
-  // Strategy 3: look for animated/spinning SVG
   const svgs = row.querySelectorAll('svg');
   for (const svg of svgs) {
     if (svg.querySelector('animate, animateTransform')) return true;
@@ -565,27 +460,17 @@ function isRowRunning(row) {
     if (/spin|progress|loading|pending|anim/i.test(cls)) return true;
   }
 
-  // Default: not running (avoid false positives)
   return false;
 }
 
-/**
- * Finds workflow rows and injects "Notify me" buttons.
- *
- * Shows the button for:
- *   - Rows detected as running/queued (multi-strategy detection)
- *   - Rows whose run ID is in watchedRuns storage (persists across reloads)
- */
 function enhanceWorkflowNotifications() {
   if (!isActionsPage()) return;
   if (!featureToggles.notifications) return;
 
-  // Gather all rows that have workflow run links
-  const allRunRows = new Map(); // runId → { row, runUrl, parsed }
+  const allRunRows = new Map();
   document.querySelectorAll('a[href*="/actions/runs/"]').forEach(link => {
     const parsed = parseWorkflowRunUrl(link.href);
     if (!parsed) return;
-    // Walk up to find the row container — try broad selectors
     const row = link.closest('[data-run-id], li, tr, .Box-row, article, div.Box-row, [class*="WorkflowRun"]')
              || link.parentElement?.closest('div, li');
     if (row && !allRunRows.has(parsed.runId)) {
@@ -593,27 +478,19 @@ function enhanceWorkflowNotifications() {
     }
   });
 
-  // Check storage for watched runs, then inject buttons
   safeStorageGet(['watchedRuns', 'githubToken'], (data) => {
     if (!data) return;
     const watched = data.watchedRuns || {};
     let watchedUpdated = false;
 
     allRunRows.forEach(({ row, runUrl, parsed }, runId) => {
-      // Skip if already has a notify button (handles DOM re-render)
       if (row.querySelector('.gh-enhancer-notify-btn')) return;
-
       const running = isRowRunning(row);
       const isWatched = !!watched[runId];
 
-      // Auto-register: if enabled and running and not yet watched, register automatically
       if (featureToggles.autoNotify && running && !isWatched && data.githubToken) {
         watched[runId] = {
-          owner: parsed.owner,
-          repo: parsed.repo,
-          runId,
-          runUrl,
-          addedAt: Date.now(),
+          owner: parsed.owner, repo: parsed.repo, runId, runUrl, addedAt: Date.now(),
         };
         watchedUpdated = true;
       }
@@ -621,15 +498,10 @@ function enhanceWorkflowNotifications() {
       if (!running && !isWatched && !watched[runId]) return;
 
       const notifyBtn = createNotifyButton(parsed.runId, runUrl);
-
-      // Insert button after the run link
       const runLink = row.querySelector('a[href*="/actions/runs/"]');
-      if (runLink) {
-        runLink.insertAdjacentElement('afterend', notifyBtn);
-      }
+      if (runLink) runLink.insertAdjacentElement('afterend', notifyBtn);
     });
 
-    // Save auto-registered runs and start polling
     if (watchedUpdated) {
       safeStorageSet({ watchedRuns: watched });
       safeSendMessage({ type: 'START_POLLING' });
@@ -637,48 +509,31 @@ function enhanceWorkflowNotifications() {
   });
 }
 
-/**
- * On a workflow run detail page (/actions/runs/{id}), injects a notify button
- * into the page header so the user can register for completion notification
- * right after triggering a workflow.
- */
 function enhanceWorkflowRunDetailPage() {
   if (!featureToggles.notifications) return;
-
-  // Only run on workflow run detail pages: /owner/repo/actions/runs/12345
   const parsed = parseWorkflowRunUrl(location.href);
   if (!parsed) return;
-
-  // Don't add if already present
   if (document.querySelector('.gh-enhancer-detail-notify')) return;
 
-  // Detect if the run is still in progress (not completed)
   const pageText = (document.body.textContent || '').toLowerCase();
   const completedKeywords = ['completed', 'success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
   const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
   const isCompleted = completedKeywords.some(kw => pageText.includes(kw))
                    && !runningKeywords.some(kw => pageText.includes(kw));
 
-  // Also show if already watched; auto-register if enabled
   safeStorageGet(['watchedRuns', 'githubToken'], (data) => {
     if (!data) return;
     const watched = data.watchedRuns || {};
     const isWatched = !!watched[parsed.runId];
 
-    // Auto-register on detail page if enabled and not completed
     if (featureToggles.autoNotify && !isCompleted && !isWatched && data.githubToken) {
       watched[parsed.runId] = {
-        owner: parsed.owner,
-        repo: parsed.repo,
-        runId: parsed.runId,
-        runUrl: location.href,
-        addedAt: Date.now(),
+        owner: parsed.owner, repo: parsed.repo, runId: parsed.runId, runUrl: location.href, addedAt: Date.now(),
       };
       safeStorageSet({ watchedRuns: watched });
       safeSendMessage({ type: 'START_POLLING' });
     }
 
-    // Don't show button on completed workflows
     if (isCompleted) return;
     if (document.querySelector('.gh-enhancer-detail-notify')) return;
 
@@ -686,34 +541,15 @@ function enhanceWorkflowRunDetailPage() {
     notifyBtn.classList.add('gh-enhancer-detail-notify');
     notifyBtn.style.cssText = 'font-size:13px;padding:4px 12px;margin-left:8px;vertical-align:middle;';
 
-    // Insert next to the run name heading.
-    // The run name is typically in an <h1> on the detail page.
-    // We look for the most specific run-name element first,
-    // then fall back to the page heading.
-    const runNameCandidates = [
-      // Run name span/link inside header
-      'h1 .markdown-title',
-      'h1 a',
-      'h1 span.css-truncate-target',
-      'h1 span',
-      'h1',
-    ];
-    for (const sel of runNameCandidates) {
+    for (const sel of ['h1 .markdown-title', 'h1 a', 'h1 span.css-truncate-target', 'h1 span', 'h1']) {
       const el = document.querySelector(sel);
-      if (el) {
-        el.insertAdjacentElement('afterend', notifyBtn);
-        return;
-      }
+      if (el) { el.insertAdjacentElement('afterend', notifyBtn); return; }
     }
   });
 }
 
-// ─── Completion toast notification (received from background.js) ────────────
+// ─── Completion toast notification ────────────────────────────────────────────
 
-/**
- * Listens for WORKFLOW_COMPLETED messages from the background script
- * and shows an in-page toast notification.
- */
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'WORKFLOW_COMPLETED') {
     showCompletionToast(message.data);
@@ -721,31 +557,19 @@ chrome.runtime.onMessage.addListener((message) => {
   }
 });
 
-/**
- * Finds all notify buttons for the given run ID and sets them to
- * a disabled "通知完了" state.
- */
 function disableNotifyButton(runId) {
   document.querySelectorAll(`.gh-enhancer-notify-btn[data-run-id="${runId}"]`).forEach(btn => {
     btn.disabled = true;
     btn.classList.remove('active');
     btn.classList.add('completed');
     btn.title = i18n.t('content.notifyCompleted');
-    const checkIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
-      <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>
-    </svg>`;
-    btn.innerHTML = `${checkIcon}${i18n.t('content.notifyDone')}`;
+    btn.innerHTML = `${ICON_CHECK}${i18n.t('content.notifyDone')}`;
   });
 }
 
-/**
- * Shows a toast notification in the bottom-right corner of the page
- * when a watched workflow completes.
- */
 function showCompletionToast(data) {
   const { workflowName, branchName, conclusion, runUrl, owner, repo } = data;
 
-  // Ensure toast container exists
   let container = document.getElementById('gh-enhancer-toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -755,7 +579,7 @@ function showCompletionToast(data) {
 
   const isSuccess = conclusion === 'success';
   const isCancelled = conclusion === 'cancelled';
-  const icon = isSuccess ? '✅' : isCancelled ? '⚠️' : '❌';
+  const icon = isSuccess ? '\u2705' : isCancelled ? '\u26a0\ufe0f' : '\u274c';
   const conclusionLabel = {
     success: i18n.t('content.conclusionSuccess'),
     failure: i18n.t('content.conclusionFailure'),
@@ -766,32 +590,66 @@ function showCompletionToast(data) {
 
   const statusClass = isSuccess ? 'success' : isCancelled ? 'warning' : 'error';
 
+  // Build toast with DOM API to avoid innerHTML XSS surface
   const toast = document.createElement('div');
   toast.className = `gh-enhancer-toast gh-enhancer-toast-${statusClass}`;
-  toast.innerHTML = `
-    <div class="gh-enhancer-toast-header">
-      <span class="gh-enhancer-toast-icon">${icon}</span>
-      <strong class="gh-enhancer-toast-title">${i18n.t('content.toastTitle')}</strong>
-      <button class="gh-enhancer-toast-close" aria-label="Close">&times;</button>
-    </div>
-    <div class="gh-enhancer-toast-body">
-      <div class="gh-enhancer-toast-workflow">${workflowName ?? 'Workflow'}</div>
-      ${branchName ? `<div class="gh-enhancer-toast-branch">${i18n.t('content.toastBranch', { branch: branchName })}</div>` : ''}
-      <div class="gh-enhancer-toast-result">${i18n.t('content.toastResult', { conclusion: conclusionLabel })}</div>
-      <div class="gh-enhancer-toast-repo">${owner}/${repo}</div>
-    </div>
-    <a class="gh-enhancer-toast-link" href="${runUrl}" target="_blank">${i18n.t('content.toastLink')}</a>
-  `;
 
-  // Close button
-  toast.querySelector('.gh-enhancer-toast-close').addEventListener('click', () => {
+  const header = document.createElement('div');
+  header.className = 'gh-enhancer-toast-header';
+
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'gh-enhancer-toast-icon';
+  iconSpan.textContent = icon;
+
+  const titleEl = document.createElement('strong');
+  titleEl.className = 'gh-enhancer-toast-title';
+  titleEl.textContent = i18n.t('content.toastTitle');
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'gh-enhancer-toast-close';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.textContent = '\u00d7';
+  closeBtn.addEventListener('click', () => {
     toast.classList.add('gh-enhancer-toast-hide');
     toast.addEventListener('transitionend', () => toast.remove());
   });
 
+  header.append(iconSpan, titleEl, closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'gh-enhancer-toast-body';
+
+  const wfEl = document.createElement('div');
+  wfEl.className = 'gh-enhancer-toast-workflow';
+  wfEl.textContent = workflowName ?? 'Workflow';
+  body.appendChild(wfEl);
+
+  if (branchName) {
+    const brEl = document.createElement('div');
+    brEl.className = 'gh-enhancer-toast-branch';
+    brEl.textContent = i18n.t('content.toastBranch', { branch: branchName });
+    body.appendChild(brEl);
+  }
+
+  const resEl = document.createElement('div');
+  resEl.className = 'gh-enhancer-toast-result';
+  resEl.textContent = i18n.t('content.toastResult', { conclusion: conclusionLabel });
+  body.appendChild(resEl);
+
+  const repoEl = document.createElement('div');
+  repoEl.className = 'gh-enhancer-toast-repo';
+  repoEl.textContent = `${owner}/${repo}`;
+  body.appendChild(repoEl);
+
+  const link = document.createElement('a');
+  link.className = 'gh-enhancer-toast-link';
+  link.href = runUrl;
+  link.target = '_blank';
+  link.textContent = i18n.t('content.toastLink');
+
+  toast.append(header, body, link);
   container.appendChild(toast);
 
-  // Auto-dismiss after 15 seconds
   setTimeout(() => {
     if (toast.parentElement) {
       toast.classList.add('gh-enhancer-toast-hide');
@@ -800,7 +658,7 @@ function showCompletionToast(data) {
   }, 15000);
 }
 
-// ─── MutationObserver: re-run on DOM changes (GitHub SPA) ────────────────────
+// ─── MutationObserver with debounce ──────────────────────────────────────────
 
 function runAllEnhancements() {
   enhanceBranchNames();
@@ -808,18 +666,18 @@ function runAllEnhancements() {
   enhanceWorkflowRunDetailPage();
 }
 
+let debounceTimer = null;
 const observer = new MutationObserver(() => {
   if (!isContextValid() || !settingsReady) return;
-  runAllEnhancements();
-  widenBranchDropdowns();
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    runAllEnhancements();
+    widenBranchDropdowns();
+  }, DEBOUNCE_MS);
 });
 
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
-});
+observer.observe(document.body, { childList: true, subtree: true });
 
-// GitHub uses Turbo navigation (SPA); re-run on page changes
 function guardedRunAll() {
   if (!settingsReady) return;
   runAllEnhancements();
@@ -827,6 +685,15 @@ function guardedRunAll() {
 document.addEventListener('turbo:load', guardedRunAll);
 document.addEventListener('turbo:render', guardedRunAll);
 document.addEventListener('pjax:end', guardedRunAll);
+
+// Cleanup listeners on context invalidation (#9)
+function cleanupListeners() {
+  document.removeEventListener('toggle', onToggle, true);
+  document.removeEventListener('click', onClick, true);
+  document.removeEventListener('turbo:load', guardedRunAll);
+  document.removeEventListener('turbo:render', guardedRunAll);
+  document.removeEventListener('pjax:end', guardedRunAll);
+}
 
 // Load settings first, then run enhancements
 loadSettings(() => {

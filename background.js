@@ -8,7 +8,8 @@
 'use strict';
 
 const ALARM_NAME = 'pollWorkflowRuns';
-const POLL_INTERVAL_MINUTES = 1; // Poll every minute
+const POLL_INTERVAL_MINUTES = 1;
+const FETCH_TIMEOUT_MS = 15000; // 15 seconds
 
 // ─── Alarm setup ─────────────────────────────────────────────────────────────
 
@@ -19,7 +20,6 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Start polling immediately when triggered by content script
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'START_POLLING') {
     ensureAlarm();
@@ -34,6 +34,56 @@ async function ensureAlarm() {
       periodInMinutes: POLL_INTERVAL_MINUTES,
     });
   }
+}
+
+// ─── Fetch with timeout ──────────────────────────────────────────────────────
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ─── i18n for background (loads JSON directly) ──────────────────────────────
+
+const bgI18nCache = {};
+
+async function loadBgI18n() {
+  const data = await chrome.storage.local.get('language');
+  const lang = data.language || detectBgLang();
+  if (bgI18nCache[lang]) return bgI18nCache[lang];
+  const url = chrome.runtime.getURL(`i18n/${lang}.json`);
+  const res = await fetch(url);
+  const json = await res.json();
+  bgI18nCache[lang] = json;
+  return json;
+}
+
+function detectBgLang() {
+  const browserLang = (navigator.language || '').toLowerCase();
+  if (browserLang.startsWith('zh')) return 'zh';
+  if (browserLang.startsWith('en')) return 'en';
+  return 'ja';
+}
+
+function bgT(messages, key, params) {
+  const parts = key.split('.');
+  let val = messages;
+  for (const p of parts) {
+    if (val == null) break;
+    val = val[p];
+  }
+  if (typeof val !== 'string') return key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      val = val.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
+    }
+  }
+  return val;
 }
 
 // ─── Polling logic ────────────────────────────────────────────────────────────
@@ -61,7 +111,7 @@ async function pollWatchedRuns() {
   await Promise.all(
     Object.values(watchedRuns).map(async (run) => {
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://api.github.com/repos/${run.owner}/${run.repo}/actions/runs/${run.runId}`,
           { headers }
         );
@@ -74,10 +124,8 @@ async function pollWatchedRuns() {
         const json = await res.json();
         const { status, conclusion, name, head_branch } = json;
 
-        // status values: queued | in_progress | completed
         if (status === 'completed') {
           completed.push(run.runId);
-          // Save URL before removing from watchedRuns so notification click can open it
           await saveNotificationUrl(run.runId, run.runUrl);
           showNotification(run, name, head_branch, conclusion);
           notifyContentScripts(run, name, head_branch, conclusion);
@@ -88,7 +136,6 @@ async function pollWatchedRuns() {
     })
   );
 
-  // Remove completed runs from watch list
   if (completed.length > 0) {
     completed.forEach(id => delete watchedRuns[id]);
     await chrome.storage.local.set({ watchedRuns });
@@ -97,39 +144,30 @@ async function pollWatchedRuns() {
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 
-function showNotification(run, workflowName, branchName, conclusion) {
+async function showNotification(run, workflowName, branchName, conclusion) {
+  const messages = await loadBgI18n();
   const isSuccess = conclusion === 'success';
   const isCancelled = conclusion === 'cancelled';
 
-  const iconMap = {
-    success: 'icons/icon48.png',
-    failure: 'icons/icon48.png',
-    cancelled: 'icons/icon48.png',
-  };
-
-  const conclusionLabel = {
-    success: '成功',
-    failure: '失敗',
-    cancelled: 'キャンセル',
-    timed_out: 'タイムアウト',
-    skipped: 'スキップ',
-  }[conclusion] ?? conclusion;
+  const conclusionKey = `content.conclusion${conclusion.charAt(0).toUpperCase() + conclusion.slice(1)}`;
+  const translated = bgT(messages, conclusionKey);
+  const conclusionLabel = (translated !== conclusionKey) ? translated : conclusion;
 
   const title = isSuccess
-    ? `✅ ワークフロー完了: ${workflowName ?? 'Workflow'}`
+    ? `✅ ${bgT(messages, 'content.toastTitle')}: ${workflowName ?? 'Workflow'}`
     : isCancelled
-    ? `⚠️ ワークフローキャンセル: ${workflowName ?? 'Workflow'}`
-    : `❌ ワークフロー失敗: ${workflowName ?? 'Workflow'}`;
+    ? `⚠️ ${bgT(messages, 'content.toastTitle')}: ${workflowName ?? 'Workflow'}`
+    : `❌ ${bgT(messages, 'content.toastTitle')}: ${workflowName ?? 'Workflow'}`;
 
   const message = [
-    branchName ? `ブランチ: ${branchName}` : '',
-    `結果: ${conclusionLabel}`,
+    branchName ? bgT(messages, 'content.toastBranch', { branch: branchName }) : '',
+    bgT(messages, 'content.toastResult', { conclusion: conclusionLabel }),
     `${run.owner}/${run.repo}`,
   ].filter(Boolean).join('\n');
 
   chrome.notifications.create(`run-${run.runId}`, {
     type: 'basic',
-    iconUrl: iconMap[conclusion] ?? 'icons/icon48.png',
+    iconUrl: 'icons/icon48.png',
     title,
     message,
     priority: 2,
@@ -137,28 +175,19 @@ function showNotification(run, workflowName, branchName, conclusion) {
 }
 
 /**
- * Sends a WORKFLOW_COMPLETED message to all open GitHub tabs so the
- * content script can show an in-page toast notification.
+ * Sends a WORKFLOW_COMPLETED message to all open GitHub tabs.
  */
 async function notifyContentScripts(run, workflowName, branchName, conclusion) {
   const tabs = await chrome.tabs.query({ url: 'https://github.com/*' });
   const data = {
-    workflowName,
-    branchName,
-    conclusion,
-    runUrl: run.runUrl,
-    owner: run.owner,
-    repo: run.repo,
-    runId: run.runId,
+    workflowName, branchName, conclusion,
+    runUrl: run.runUrl, owner: run.owner, repo: run.repo, runId: run.runId,
   };
   for (const tab of tabs) {
     chrome.tabs.sendMessage(tab.id, { type: 'WORKFLOW_COMPLETED', data }).catch(() => {});
   }
 }
 
-/**
- * Saves a run URL so it can be opened when the OS notification is clicked.
- */
 async function saveNotificationUrl(runId, url) {
   const data = await chrome.storage.local.get('notificationUrls');
   const urls = data.notificationUrls || {};
@@ -170,11 +199,11 @@ async function saveNotificationUrl(runId, url) {
 chrome.notifications.onClicked.addListener((notificationId) => {
   const runId = notificationId.replace('run-', '');
   chrome.storage.local.get('notificationUrls', (data) => {
+    if (!data) return;
     const urls = data.notificationUrls || {};
     const url = urls[runId];
     if (url) {
       chrome.tabs.create({ url });
-      // Clean up
       delete urls[runId];
       chrome.storage.local.set({ notificationUrls: urls });
     }
