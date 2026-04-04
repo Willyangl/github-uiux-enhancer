@@ -468,19 +468,34 @@ function createNotifyButton(runId, runUrl) {
  *   - Absence of completed status text
  */
 function isRowRunning(row) {
+  const text = (row.textContent || '').toLowerCase();
+
+  // First check: if the row clearly shows completed status, it's NOT running.
+  // Completed rows on GitHub show a green check / red X / grey cancel icon,
+  // and display the elapsed time (e.g. "1m 7s", "20s", "2m 30s").
+  const completedKeywords = ['success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out', 'completed'];
+  if (completedKeywords.some(kw => text.includes(kw))) return false;
+
+  // Elapsed time pattern (e.g. "1m 7s", "20s", "3m") in the row indicates completion
+  if (/\d+m\s*\d*s|\d+s/.test(text)) {
+    // But "in progress" rows can also show elapsed time — check for running keywords first
+    const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
+    if (!runningKeywords.some(kw => text.includes(kw))) return false;
+  }
+
+  // Green check / red X / cancelled SVG icons indicate completed state
+  const statusIcons = row.querySelectorAll('svg.octicon-check-circle-fill, svg.octicon-x-circle-fill, svg.octicon-stop');
+  if (statusIcons.length > 0) return false;
+
+  // Now check for running indicators
   // Strategy 1: legacy selector-based detection
   if (row.querySelector(RUNNING_ROW_SELECTORS.join(','))) return true;
 
-  // Strategy 2: text-content detection (case-insensitive)
-  const text = (row.textContent || '').toLowerCase();
+  // Strategy 2: text-content detection
   const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
   if (runningKeywords.some(kw => text.includes(kw))) return true;
 
-  // Strategy 3: completed statuses — if present, NOT running
-  const completedKeywords = ['completed', 'success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
-  if (completedKeywords.some(kw => text.includes(kw))) return false;
-
-  // Strategy 4: look for animated/spinning SVG (common for in-progress)
+  // Strategy 3: look for animated/spinning SVG
   const svgs = row.querySelectorAll('svg');
   for (const svg of svgs) {
     if (svg.querySelector('animate, animateTransform')) return true;
@@ -488,6 +503,7 @@ function isRowRunning(row) {
     if (/spin|progress|loading|pending|anim/i.test(cls)) return true;
   }
 
+  // Default: not running (avoid false positives)
   return false;
 }
 
