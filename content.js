@@ -245,24 +245,6 @@ function getBranchText(el) {
 }
 
 /**
- * Replaces the text content of an element with line breaks inserted
- * every `interval` characters so that long branch names wrap neatly.
- */
-function wrapBranchName(el, text, interval) {
-  if (text.length <= interval) return;
-
-  // Clear existing content and rebuild with <wbr> / newline hints
-  el.textContent = '';
-  for (let i = 0; i < text.length; i += interval) {
-    const chunk = text.substring(i, i + interval);
-    el.appendChild(document.createTextNode(chunk));
-    if (i + interval < text.length) {
-      el.appendChild(document.createElement('br'));
-    }
-  }
-}
-
-/**
  * Shows a tooltip bubble above the target element, then fades out.
  */
 function showCopyTooltip(target, text) {
@@ -377,10 +359,9 @@ function enhanceBranchNames() {
     const branchName = getBranchText(el);
     if (!branchName) return;
 
-    // Feature 2: Show full branch name with line breaks every 30 chars
+    // Feature 2: Show full branch name (auto-wrap within default width)
     if (featureToggles.fullBranchName) {
       el.classList.add('gh-enhancer-branch-name');
-      wrapBranchName(el, branchName, 30);
     }
 
     // Feature 3: Add copy button after the element
