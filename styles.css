@@ -79,6 +79,41 @@
   opacity: 1;
 }
 
+/* ─── Copy tooltip bubble ─────────────────────────────── */
+
+.gh-enhancer-tooltip {
+  position: absolute;
+  z-index: 100000;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #fff;
+  background-color: #24292f;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Small arrow pointing down */
+.gh-enhancer-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #24292f transparent transparent transparent;
+}
+
+.gh-enhancer-tooltip-hide {
+  opacity: 0;
+}
+
 /* =====================================================
    Feature 4: Notify button styles
    ===================================================== */
