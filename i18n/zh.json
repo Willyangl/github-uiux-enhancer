@@ -49,6 +49,11 @@
     "conclusionFailure": "失败",
     "conclusionCancelled": "已取消",
     "conclusionTimedOut": "超时",
-    "conclusionSkipped": "已跳过"
+    "conclusionSkipped": "已跳过",
+    "rerun": "相同条件运行",
+    "rerunTitle": "使用相同参数重新运行工作流",
+    "rerunning": "运行中…",
+    "rerunDone": "已触发",
+    "rerunFailed": "运行失败"
   }
 }

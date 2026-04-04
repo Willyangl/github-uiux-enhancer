@@ -72,6 +72,7 @@ let featureToggles = {
   autoNotify: false,
 };
 let dropdownCharCount = 50; // characters visible in dropdown
+let settingsReady = false;  // true after loadSettings (incl. i18n) completes
 
 // Selectors for branch name elements in Actions workflow run rows.
 const BRANCH_LINK_SELECTORS = [
@@ -111,6 +112,7 @@ function loadSettings(callback) {
     if (typeof i18n !== 'undefined') {
       await i18n.load();
     }
+    settingsReady = true;
     if (callback) callback();
   });
 }
@@ -450,7 +452,7 @@ function createNotifyButton(runId, runUrl) {
   const btn = document.createElement('button');
   btn.className = 'gh-enhancer-notify-btn';
   btn.dataset.runId = runId;
-  btn.title = 'Notify me when this workflow completes';
+  btn.title = i18n.t('content.notifyTitle');
 
   const bellIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
     <path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Zm5-3.5A3.5 3.5 0 0 0 4.5 5v2.947c0 .346-.102.683-.294.97l-1.703 2.556a.017.017 0 0 0-.003.01l.001.006c0 .002.002.004.004.006l.006.004.007.001h10.964l.007-.001.006-.004.004-.006.001-.007a.017.017 0 0 0-.003-.01l-1.703-2.554a1.745 1.745 0 0 1-.294-.97V5A3.5 3.5 0 0 0 8 1.5Z"/>
@@ -635,6 +637,101 @@ function enhanceWorkflowNotifications() {
   });
 }
 
+// ─── Feature 5: Re-run workflow with same parameters ─────────────────────────
+
+/**
+ * Creates a "re-run" button that re-runs the exact same workflow run
+ * with all original parameters (branch, commit, inputs) preserved.
+ * Uses POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun
+ */
+function createRerunButton(runUrl, parsed) {
+  const btn = document.createElement('button');
+  btn.className = 'gh-enhancer-rerun-btn';
+  btn.title = i18n.t('content.rerunTitle');
+
+  const rerunIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style="margin-right:3px">
+    <path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/>
+  </svg>`;
+
+  btn.innerHTML = `${rerunIcon}${i18n.t('content.rerun')}`;
+
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Need token
+    if (!isContextValid()) return;
+    const tokenData = await new Promise(resolve => safeStorageGet('githubToken', resolve));
+    if (!tokenData || !tokenData.githubToken) {
+      alert(i18n.t('content.alertTokenRequired'));
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `${rerunIcon}${i18n.t('content.rerunning')}`;
+
+    try {
+      const token = tokenData.githubToken;
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      };
+
+      // Re-run the exact same workflow run (preserves branch, commit, inputs)
+      const rerunRes = await fetch(
+        `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/actions/runs/${parsed.runId}/rerun`,
+        { method: 'POST', headers }
+      );
+
+      if (rerunRes.status === 201) {
+        btn.innerHTML = `${rerunIcon}${i18n.t('content.rerunDone')}`;
+        btn.classList.add('rerun-success');
+        showCopyTooltip(btn, i18n.t('content.rerunDone'));
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.classList.remove('rerun-success');
+          btn.innerHTML = `${rerunIcon}${i18n.t('content.rerun')}`;
+        }, 3000);
+      } else {
+        throw new Error(`Dispatch failed: ${dispatchRes.status}`);
+      }
+    } catch (err) {
+      btn.innerHTML = `${rerunIcon}${i18n.t('content.rerunFailed')}`;
+      btn.classList.add('rerun-error');
+      showCopyTooltip(btn, err.message);
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove('rerun-error');
+        btn.innerHTML = `${rerunIcon}${i18n.t('content.rerun')}`;
+      }, 3000);
+    }
+  });
+
+  return btn;
+}
+
+/**
+ * Adds re-run buttons to workflow run rows in the Actions list.
+ */
+function enhanceWorkflowRerun() {
+  if (!isActionsPage()) return;
+
+  document.querySelectorAll('a[href*="/actions/runs/"]').forEach(link => {
+    const parsed = parseWorkflowRunUrl(link.href);
+    if (!parsed) return;
+    const row = link.closest('[data-run-id], li, tr, .Box-row, article, div.Box-row, [class*="WorkflowRun"]')
+             || link.parentElement?.closest('div, li');
+    if (!row) return;
+
+    // Skip if already has a rerun button
+    if (row.querySelector('.gh-enhancer-rerun-btn')) return;
+
+    const rerunBtn = createRerunButton(link.href, parsed);
+    link.insertAdjacentElement('afterend', rerunBtn);
+  });
+}
+
 /**
  * On a workflow run detail page (/actions/runs/{id}), injects a notify button
  * into the page header so the user can register for completion notification
@@ -676,7 +773,8 @@ function enhanceWorkflowRunDetailPage() {
       safeSendMessage({ type: 'START_POLLING' });
     }
 
-    if (isCompleted && !isWatched && !watched[parsed.runId]) return;
+    // Don't show button on completed workflows
+    if (isCompleted) return;
     if (document.querySelector('.gh-enhancer-detail-notify')) return;
 
     const notifyBtn = createNotifyButton(parsed.runId, location.href);
@@ -802,11 +900,12 @@ function showCompletionToast(data) {
 function runAllEnhancements() {
   enhanceBranchNames();
   enhanceWorkflowNotifications();
+  enhanceWorkflowRerun();
   enhanceWorkflowRunDetailPage();
 }
 
 const observer = new MutationObserver(() => {
-  if (!isContextValid()) return;
+  if (!isContextValid() || !settingsReady) return;
   runAllEnhancements();
   widenBranchDropdowns();
 });
@@ -817,9 +916,13 @@ observer.observe(document.body, {
 });
 
 // GitHub uses Turbo navigation (SPA); re-run on page changes
-document.addEventListener('turbo:load', runAllEnhancements);
-document.addEventListener('turbo:render', runAllEnhancements);
-document.addEventListener('pjax:end', runAllEnhancements);
+function guardedRunAll() {
+  if (!settingsReady) return;
+  runAllEnhancements();
+}
+document.addEventListener('turbo:load', guardedRunAll);
+document.addEventListener('turbo:render', guardedRunAll);
+document.addEventListener('pjax:end', guardedRunAll);
 
 // Load settings first, then run enhancements
 loadSettings(() => {

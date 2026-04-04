@@ -2,13 +2,36 @@ name: Dummy Long Run
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'デプロイ先環境'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      version:
+        description: 'バージョン番号'
+        required: false
+        default: '1.0.0'
+        type: string
+      dry_run:
+        description: 'ドライラン（実際には実行しない）'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   wait:
     runs-on: ubuntu-latest
     steps:
-      - name: Step 1 - Start
-        run: echo "Starting dummy workflow..."
+      - name: Step 1 - Show parameters
+        run: |
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Version: ${{ inputs.version }}"
+          echo "Dry run: ${{ inputs.dry_run }}"
 
       - name: Step 2 - Sleep
         run: sleep 30
