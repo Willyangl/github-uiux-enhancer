@@ -28,13 +28,15 @@
    Feature 2: Show full branch names in workflow list
    ===================================================== */
 
-/* Prevent truncation of branch name links in Actions workflow runs */
+/* Show full branch names in Actions workflow runs, wrapping at 30-char intervals */
 .gh-enhancer-branch-name {
   overflow: visible !important;
   text-overflow: unset !important;
-  white-space: nowrap !important;
+  white-space: normal !important;
   max-width: none !important;
   display: inline !important;
+  word-break: break-all !important;
+  line-height: 1.4 !important;
 }
 
 /* Container of branch name may also truncate */
