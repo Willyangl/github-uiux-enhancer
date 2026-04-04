@@ -1,16 +1,10 @@
 name: Test
 
 on:
-  # 無効化: push/PR トリガーをコメントアウト
-  # workflow_dispatch:
-  # push:
-  #   branches: ['**']
-  # pull_request:
-  #   branches: [main]
-
-  # このワークフローを無効にするため、存在しないイベントで発火させる
-  schedule:
-    - cron: '0 0 31 2 *'  # 2月31日 = 永遠に発火しない
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   test:

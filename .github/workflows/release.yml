@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update manifest version
+        run: |
+          jq --arg ver "${{ steps.version.outputs.VERSION }}" \
+            '.version = $ver' manifest.json > manifest.tmp && mv manifest.tmp manifest.json
+          echo "manifest.json version updated to ${{ steps.version.outputs.VERSION }}"
+          cat manifest.json | head -5
+
+      - name: Create ZIP package
+        run: |
+          mkdir -p dist
+          zip -r "dist/github-enhancer-${{ steps.version.outputs.VERSION }}.zip" \
+            manifest.json \
+            content.js \
+            background.js \
+            popup.html \
+            popup.js \
+            styles.css \
+            i18n.js \
+            i18n/ \
+            icons/icon16.png \
+            icons/icon48.png \
+            icons/icon128.png
+          echo "Package contents:"
+          unzip -l "dist/github-enhancer-${{ steps.version.outputs.VERSION }}.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "GitHub Enhancer v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## GitHub Enhancer v${{ steps.version.outputs.VERSION }}
+
+            ### Installation
+            1. Download `github-enhancer-${{ steps.version.outputs.VERSION }}.zip`
+            2. Chrome: `chrome://extensions/` → Developer mode → Load unpacked
+            3. Edge: `edge://extensions/` → Developer mode → Load unpacked
+
+            ### Chrome Web Store
+            To upload to Chrome Web Store, use the ZIP file attached below.
+          files: dist/github-enhancer-${{ steps.version.outputs.VERSION }}.zip
+          draft: false
+          prerelease: false
