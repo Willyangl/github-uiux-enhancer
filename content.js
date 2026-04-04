@@ -9,6 +9,56 @@
 
 'use strict';
 
+// ─── Extension context guard ──────────────────────────────────────────────────
+// After the extension is reloaded/updated, old content scripts remain in the
+// page but their chrome.* APIs throw "Extension context invalidated".
+// We detect this and stop all processing.
+
+let contextValid = true;
+
+function isContextValid() {
+  try {
+    void chrome.runtime.id;
+    return true;
+  } catch {
+    contextValid = false;
+    // Disconnect observer to stop further processing
+    if (typeof observer !== 'undefined') observer.disconnect();
+    return false;
+  }
+}
+
+/**
+ * Safe wrapper for chrome.storage.local.get that silently fails
+ * when the extension context has been invalidated.
+ */
+function safeStorageGet(keys, callback) {
+  if (!isContextValid()) return;
+  try {
+    chrome.storage.local.get(keys, callback);
+  } catch { contextValid = false; }
+}
+
+/**
+ * Safe wrapper for chrome.storage.local.set.
+ */
+function safeStorageSet(items, callback) {
+  if (!isContextValid()) return;
+  try {
+    chrome.storage.local.set(items, callback);
+  } catch { contextValid = false; }
+}
+
+/**
+ * Safe wrapper for chrome.runtime.sendMessage.
+ */
+function safeSendMessage(msg) {
+  if (!isContextValid()) return;
+  try {
+    chrome.runtime.sendMessage(msg);
+  } catch { contextValid = false; }
+}
+
 // ─── Constants & State ────────────────────────────────────────────────────────
 
 const PROCESSED_ATTR = 'data-gh-enhancer';
@@ -49,7 +99,7 @@ const RUNNING_ROW_SELECTORS = [
 // ─── Settings loader ──────────────────────────────────────────────────────────
 
 function loadSettings(callback) {
-  chrome.storage.local.get(['featureToggles', 'dropdownCharCount'], (data) => {
+  safeStorageGet(['featureToggles', 'dropdownCharCount'], (data) => {
     if (data.featureToggles) {
       featureToggles = { ...featureToggles, ...data.featureToggles };
     }
@@ -62,6 +112,7 @@ function loadSettings(callback) {
 
 // React to settings changes from popup in real-time
 chrome.storage.onChanged.addListener((changes) => {
+  if (!isContextValid()) return;
   let needsRerun = false;
 
   if (changes.featureToggles) {
@@ -403,7 +454,7 @@ function createNotifyButton(runId, runUrl) {
   btn.innerHTML = `${bellIcon}通知`;
 
   // Check if already watching this run
-  chrome.storage.local.get('watchedRuns', (data) => {
+  safeStorageGet('watchedRuns', (data) => {
     const watched = data.watchedRuns || {};
     if (watched[runId]) {
       btn.classList.add('active');
@@ -416,19 +467,22 @@ function createNotifyButton(runId, runUrl) {
     e.preventDefault();
     e.stopPropagation();
 
-    const data = await new Promise(resolve => chrome.storage.local.get('watchedRuns', resolve));
+    if (!isContextValid()) return;
+    const data = await new Promise(resolve => safeStorageGet('watchedRuns', resolve));
+    if (!data) return;
     const watched = data.watchedRuns || {};
 
     if (watched[runId]) {
       // Cancel notification
       delete watched[runId];
-      await new Promise(resolve => chrome.storage.local.set({ watchedRuns: watched }, resolve));
+      await new Promise(resolve => safeStorageSet({ watchedRuns: watched }, resolve));
       btn.classList.remove('active');
       btn.title = 'Notify me when this workflow completes';
       btn.innerHTML = `${bellIcon}通知`;
     } else {
       // Check for token
-      const tokenData = await new Promise(resolve => chrome.storage.local.get('githubToken', resolve));
+      const tokenData = await new Promise(resolve => safeStorageGet('githubToken', resolve));
+      if (!tokenData) return;
       if (!tokenData.githubToken) {
         alert('GitHub Enhancer: GitHub Personal Access Tokenを設定してください。\n拡張機能アイコンをクリックして設定画面を開いてください。');
         return;
@@ -447,10 +501,10 @@ function createNotifyButton(runId, runUrl) {
         runUrl,
         addedAt: Date.now(),
       };
-      await new Promise(resolve => chrome.storage.local.set({ watchedRuns: watched }, resolve));
+      await new Promise(resolve => safeStorageSet({ watchedRuns: watched }, resolve));
 
       // Tell background to start polling
-      chrome.runtime.sendMessage({ type: 'START_POLLING' });
+      safeSendMessage({ type: 'START_POLLING' });
 
       btn.classList.add('active');
       btn.title = 'Watching — will notify when complete (click to cancel)';
@@ -533,7 +587,8 @@ function enhanceWorkflowNotifications() {
   });
 
   // Check storage for watched runs, then inject buttons
-  chrome.storage.local.get(['watchedRuns', 'githubToken'], (data) => {
+  safeStorageGet(['watchedRuns', 'githubToken'], (data) => {
+    if (!data) return;
     const watched = data.watchedRuns || {};
     let watchedUpdated = false;
 
@@ -569,8 +624,8 @@ function enhanceWorkflowNotifications() {
 
     // Save auto-registered runs and start polling
     if (watchedUpdated) {
-      chrome.storage.local.set({ watchedRuns: watched });
-      chrome.runtime.sendMessage({ type: 'START_POLLING' });
+      safeStorageSet({ watchedRuns: watched });
+      safeSendMessage({ type: 'START_POLLING' });
     }
   });
 }
@@ -598,7 +653,8 @@ function enhanceWorkflowRunDetailPage() {
                    && !runningKeywords.some(kw => pageText.includes(kw));
 
   // Also show if already watched; auto-register if enabled
-  chrome.storage.local.get(['watchedRuns', 'githubToken'], (data) => {
+  safeStorageGet(['watchedRuns', 'githubToken'], (data) => {
+    if (!data) return;
     const watched = data.watchedRuns || {};
     const isWatched = !!watched[parsed.runId];
 
@@ -611,8 +667,8 @@ function enhanceWorkflowRunDetailPage() {
         runUrl: location.href,
         addedAt: Date.now(),
       };
-      chrome.storage.local.set({ watchedRuns: watched });
-      chrome.runtime.sendMessage({ type: 'START_POLLING' });
+      safeStorageSet({ watchedRuns: watched });
+      safeSendMessage({ type: 'START_POLLING' });
     }
 
     if (isCompleted && !isWatched && !watched[parsed.runId]) return;
@@ -742,9 +798,8 @@ function runAllEnhancements() {
 }
 
 const observer = new MutationObserver(() => {
+  if (!isContextValid()) return;
   runAllEnhancements();
-  // Also check for branch dropdowns — Primer overlays are rendered via portals
-  // and appear as new DOM nodes, so MutationObserver is the right place to catch them.
   widenBranchDropdowns();
 });
 
