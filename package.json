@@ -1,0 +1,25 @@
+{
+  "name": "github-enhancer",
+  "version": "1.0.0",
+  "description": "Microsoft Edge / Chrome 向けブラウザ拡張機能。GitHubの使い勝手を改善します。",
+  "main": "background.js",
+  "scripts": {
+    "test": "jest --verbose --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Willyangl/github-enhancer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Willyangl/github-enhancer/issues"
+  },
+  "homepage": "https://github.com/Willyangl/github-enhancer#readme",
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0"
+  }
+}
