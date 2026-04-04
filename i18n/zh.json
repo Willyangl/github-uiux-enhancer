@@ -49,6 +49,7 @@
     "conclusionFailure": "失败",
     "conclusionCancelled": "已取消",
     "conclusionTimedOut": "超时",
-    "conclusionSkipped": "已跳过"
+    "conclusionSkipped": "已跳过",
+    "defaultWorkflowName": "工作流"
   }
 }

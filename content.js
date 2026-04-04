@@ -621,7 +621,7 @@ function showCompletionToast(data) {
 
   const wfEl = document.createElement('div');
   wfEl.className = 'gh-enhancer-toast-workflow';
-  wfEl.textContent = workflowName ?? 'Workflow';
+  wfEl.textContent = workflowName ?? i18n.t('content.defaultWorkflowName');
   body.appendChild(wfEl);
 
   if (branchName) {

@@ -31,13 +31,13 @@
     "language": "言語"
   },
   "content": {
-    "copied": "Copied!",
-    "copyFailed": "Failed to copy",
+    "copied": "コピーしました！",
+    "copyFailed": "コピーに失敗しました",
     "notify": "通知",
     "notifying": "通知中",
     "notifyDone": "通知完了",
-    "notifyTitle": "Notify me when this workflow completes",
-    "notifyWatching": "Watching — will notify when complete (click to cancel)",
+    "notifyTitle": "ワークフロー完了時に通知する",
+    "notifyWatching": "監視中 — 完了時に通知します（クリックで解除）",
     "notifyCompleted": "ワークフロー完了 — 通知済み",
     "alertTokenRequired": "GitHub Enhancer: GitHub Personal Access Tokenを設定してください。\n拡張機能アイコンをクリックして設定画面を開いてください。",
     "alertParseFailed": "GitHub Enhancer: このページのワークフロー情報を取得できませんでした。",
@@ -49,6 +49,7 @@
     "conclusionFailure": "失敗",
     "conclusionCancelled": "キャンセル",
     "conclusionTimedOut": "タイムアウト",
-    "conclusionSkipped": "スキップ"
+    "conclusionSkipped": "スキップ",
+    "defaultWorkflowName": "ワークフロー"
   }
 }

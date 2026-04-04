@@ -33,11 +33,16 @@ const i18n = (() => {
    */
   async function fetchMessages(lang) {
     if (cache[lang]) return cache[lang];
-    const url = chrome.runtime.getURL(`i18n/${lang}.json`);
-    const res = await fetch(url);
-    const json = await res.json();
-    cache[lang] = json;
-    return json;
+    try {
+      const url = chrome.runtime.getURL(`i18n/${lang}.json`);
+      const res = await fetch(url);
+      if (!res.ok) return {};
+      const json = await res.json();
+      cache[lang] = json;
+      return json;
+    } catch {
+      return {};
+    }
   }
 
   /**

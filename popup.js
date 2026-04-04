@@ -7,6 +7,8 @@ const tokenStatus = document.getElementById('token-status');
 const watchedRunsList = document.getElementById('watched-runs-list');
 const langSelect = document.getElementById('lang-select');
 
+const FETCH_TIMEOUT_MS = 15000;
+
 // Feature toggles
 const toggleIds = {
   widenDropdown: 'toggle-widenDropdown',
@@ -29,56 +31,65 @@ const DEFAULTS = {
   dropdownCharCount: 50,
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Safe text-only token status update (avoids innerHTML XSS) */
+function setTokenStatus(iconText, message, className) {
+  tokenStatus.textContent = '';
+  const div = document.createElement('div');
+  div.className = className;
+  div.textContent = `${iconText} ${message}`;
+  tokenStatus.appendChild(div);
+}
+
+/** Fetch with AbortController timeout */
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── i18n helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Applies translations to all elements with data-i18n attribute.
- */
 function applyTranslations() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     const text = i18n.t(key);
     if (text !== key) el.textContent = text;
   });
-  // Also translate the placeholder
   if (tokenInput) tokenInput.placeholder = i18n.t('popup.tokenPlaceholder');
+  // Update HTML lang attribute to match selected language
+  document.documentElement.lang = i18n.getLang();
 }
 
 // ─── Load saved state ─────────────────────────────────────────────────────────
 
 (async () => {
-  // Load language first, then apply translations
   const lang = await i18n.load();
   if (langSelect) langSelect.value = lang;
   applyTranslations();
 
   chrome.storage.local.get(['githubToken', 'watchedRuns', 'featureToggles', 'dropdownCharCount'], (data) => {
-    // Token status
     if (data.githubToken) {
       tokenInput.placeholder = i18n.t('popup.tokenPlaceholderSaved');
-      tokenStatus.innerHTML = `
-        <div class="token-set-indicator">
-          ✅ ${i18n.t('popup.tokenSet')}
-        </div>`;
+      setTokenStatus('✅', i18n.t('popup.tokenSet'), 'token-set-indicator');
     } else {
-      tokenStatus.innerHTML = `
-        <div class="token-not-set-indicator">
-          ⚠️ ${i18n.t('popup.tokenNotSet')}
-        </div>`;
+      setTokenStatus('⚠️', i18n.t('popup.tokenNotSet'), 'token-not-set-indicator');
     }
 
-    // Feature toggles
     const toggles = { ...DEFAULTS.featureToggles, ...(data.featureToggles || {}) };
     Object.entries(toggleIds).forEach(([key, id]) => {
       const el = document.getElementById(id);
       if (el) el.checked = toggles[key];
     });
 
-    // Dropdown char count
     const charCount = data.dropdownCharCount ?? DEFAULTS.dropdownCharCount;
     if (dropdownCharInput) dropdownCharInput.value = charCount;
 
-    // Show/hide sub-settings based on toggles
     updateDropdownCharVisibility(toggles.widenDropdown);
     updateAutoNotifyVisibility(toggles.notifications);
 
@@ -92,13 +103,12 @@ if (langSelect) {
   langSelect.addEventListener('change', async () => {
     await i18n.setLang(langSelect.value);
     applyTranslations();
-    // Re-render dynamic content
     chrome.storage.local.get(['githubToken', 'watchedRuns'], (data) => {
       if (data.githubToken) {
         tokenInput.placeholder = i18n.t('popup.tokenPlaceholderSaved');
-        tokenStatus.innerHTML = `<div class="token-set-indicator">✅ ${i18n.t('popup.tokenSet')}</div>`;
+        setTokenStatus('✅', i18n.t('popup.tokenSet'), 'token-set-indicator');
       } else {
-        tokenStatus.innerHTML = `<div class="token-not-set-indicator">⚠️ ${i18n.t('popup.tokenNotSet')}</div>`;
+        setTokenStatus('⚠️', i18n.t('popup.tokenNotSet'), 'token-not-set-indicator');
       }
       renderWatchedRuns(data.watchedRuns || {});
     });
@@ -115,31 +125,21 @@ Object.entries(toggleIds).forEach(([key, id]) => {
       const toggles = { ...DEFAULTS.featureToggles, ...(data.featureToggles || {}) };
       toggles[key] = el.checked;
       chrome.storage.local.set({ featureToggles: toggles });
-
-      if (key === 'widenDropdown') {
-        updateDropdownCharVisibility(el.checked);
-      }
-      if (key === 'notifications') {
-        updateAutoNotifyVisibility(el.checked);
-      }
+      if (key === 'widenDropdown') updateDropdownCharVisibility(el.checked);
+      if (key === 'notifications') updateAutoNotifyVisibility(el.checked);
     });
   });
 });
 
 function updateDropdownCharVisibility(enabled) {
-  if (dropdownCharSetting) {
-    dropdownCharSetting.style.display = enabled ? 'flex' : 'none';
-  }
+  if (dropdownCharSetting) dropdownCharSetting.style.display = enabled ? 'flex' : 'none';
 }
 
 function updateAutoNotifyVisibility(enabled) {
   const el = document.getElementById('auto-notify-setting');
-  if (el) {
-    el.style.display = enabled ? 'flex' : 'none';
-  }
+  if (el) el.style.display = enabled ? 'flex' : 'none';
 }
 
-// Dropdown char count handler
 if (dropdownCharInput) {
   dropdownCharInput.addEventListener('change', () => {
     let val = parseInt(dropdownCharInput.value, 10);
@@ -164,12 +164,11 @@ saveTokenBtn.addEventListener('click', async () => {
     return;
   }
 
-  // Verify token with GitHub API
   saveTokenBtn.disabled = true;
   saveTokenBtn.textContent = i18n.t('popup.tokenSaving');
 
   try {
-    const res = await fetch('https://api.github.com/user', {
+    const res = await fetchWithTimeout('https://api.github.com/user', {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github+json',
@@ -181,7 +180,7 @@ saveTokenBtn.addEventListener('click', async () => {
       chrome.storage.local.set({ githubToken: token }, () => {
         tokenInput.value = '';
         tokenInput.placeholder = i18n.t('popup.tokenPlaceholderSaved');
-        tokenStatus.innerHTML = `<div class="token-set-indicator">✅ ${i18n.t('popup.tokenSetUser', { user: user.login })}</div>`;
+        setTokenStatus('✅', i18n.t('popup.tokenSetUser', { user: user.login }), 'token-set-indicator');
         showStatus(i18n.t('popup.tokenSaved', { user: user.login }), 'success');
         chrome.runtime.sendMessage({ type: 'START_POLLING' });
       });
@@ -198,7 +197,6 @@ saveTokenBtn.addEventListener('click', async () => {
   }
 });
 
-// Allow saving with Enter key
 tokenInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') saveTokenBtn.click();
 });
@@ -209,11 +207,15 @@ function renderWatchedRuns(watchedRuns) {
   const runs = Object.values(watchedRuns);
 
   if (runs.length === 0) {
-    watchedRunsList.innerHTML = `<p class="empty-msg">${i18n.t('popup.watchedEmpty')}</p>`;
+    watchedRunsList.textContent = '';
+    const p = document.createElement('p');
+    p.className = 'empty-msg';
+    p.textContent = i18n.t('popup.watchedEmpty');
+    watchedRunsList.appendChild(p);
     return;
   }
 
-  watchedRunsList.innerHTML = '';
+  watchedRunsList.textContent = '';
   runs.forEach(run => {
     const item = document.createElement('div');
     item.className = 'watched-run-item';
@@ -245,7 +247,6 @@ function renderWatchedRuns(watchedRuns) {
   });
 }
 
-// Auto-refresh watched runs list
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.watchedRuns) {
     renderWatchedRuns(changes.watchedRuns.newValue || {});

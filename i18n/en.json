@@ -49,6 +49,7 @@
     "conclusionFailure": "Failure",
     "conclusionCancelled": "Cancelled",
     "conclusionTimedOut": "Timed out",
-    "conclusionSkipped": "Skipped"
+    "conclusionSkipped": "Skipped",
+    "defaultWorkflowName": "Workflow"
   }
 }

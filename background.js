@@ -129,7 +129,8 @@ async function pollWatchedRuns() {
           return;
         }
 
-        const json = await res.json();
+        const json = await res.json().catch(() => null);
+        if (!json || !json.status) return;
         const { status, conclusion, name, head_branch } = json;
 
         if (status === 'completed') {
