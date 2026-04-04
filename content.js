@@ -461,23 +461,55 @@ function createNotifyButton(runId, runUrl) {
 }
 
 /**
+ * Detects whether a workflow row represents a non-completed run.
+ * Uses multiple strategies since GitHub's DOM changes frequently:
+ *   - Legacy status indicator selectors
+ *   - Text-content-based detection ("In progress", "Queued", etc.)
+ *   - Absence of completed status text
+ */
+function isRowRunning(row) {
+  // Strategy 1: legacy selector-based detection
+  if (row.querySelector(RUNNING_ROW_SELECTORS.join(','))) return true;
+
+  // Strategy 2: text-content detection (case-insensitive)
+  const text = (row.textContent || '').toLowerCase();
+  const runningKeywords = ['in progress', 'queued', 'waiting', 'pending', 'requested'];
+  if (runningKeywords.some(kw => text.includes(kw))) return true;
+
+  // Strategy 3: completed statuses — if present, NOT running
+  const completedKeywords = ['completed', 'success', 'failure', 'failed', 'cancelled', 'skipped', 'timed out'];
+  if (completedKeywords.some(kw => text.includes(kw))) return false;
+
+  // Strategy 4: look for animated/spinning SVG (common for in-progress)
+  const svgs = row.querySelectorAll('svg');
+  for (const svg of svgs) {
+    if (svg.querySelector('animate, animateTransform')) return true;
+    const cls = svg.className?.baseVal || svg.getAttribute('class') || '';
+    if (/spin|progress|loading|pending|anim/i.test(cls)) return true;
+  }
+
+  return false;
+}
+
+/**
  * Finds workflow rows and injects "Notify me" buttons.
  *
- * Two modes:
- *   1. Running rows (detected by status indicators) — show "通知" button
- *   2. Rows whose run ID is in watchedRuns storage — show "通知中" button
- *      (persists across page reloads until the workflow completes)
+ * Shows the button for:
+ *   - Rows detected as running/queued (multi-strategy detection)
+ *   - Rows whose run ID is in watchedRuns storage (persists across reloads)
  */
 function enhanceWorkflowNotifications() {
   if (!isActionsPage()) return;
   if (!featureToggles.notifications) return;
 
   // Gather all rows that have workflow run links
-  const allRunRows = new Map(); // runId → row element
+  const allRunRows = new Map(); // runId → { row, runUrl, parsed }
   document.querySelectorAll('a[href*="/actions/runs/"]').forEach(link => {
     const parsed = parseWorkflowRunUrl(link.href);
     if (!parsed) return;
-    const row = link.closest('[data-run-id], li, tr, .Box-row, article');
+    // Walk up to find the row container — try broad selectors
+    const row = link.closest('[data-run-id], li, tr, .Box-row, article, div.Box-row, [class*="WorkflowRun"]')
+             || link.parentElement?.closest('div, li');
     if (row && !allRunRows.has(parsed.runId)) {
       allRunRows.set(parsed.runId, { row, runUrl: link.href, parsed });
     }
@@ -488,27 +520,19 @@ function enhanceWorkflowNotifications() {
     const watched = data.watchedRuns || {};
 
     allRunRows.forEach(({ row, runUrl, parsed }, runId) => {
-      if (row.getAttribute(PROCESSED_ATTR + '-notify')) return;
+      // Skip if already has a notify button (handles DOM re-render)
+      if (row.querySelector('.gh-enhancer-notify-btn')) return;
 
-      // Determine if this row should get a notify button:
-      // - It is currently running (status indicator present), OR
-      // - Its run ID is in the watched list (user previously clicked "通知")
-      const isRunning = !!row.querySelector(RUNNING_ROW_SELECTORS.join(','));
+      const running = isRowRunning(row);
       const isWatched = !!watched[runId];
 
-      if (!isRunning && !isWatched) return;
-
-      row.setAttribute(PROCESSED_ATTR + '-notify', 'true');
+      if (!running && !isWatched) return;
 
       const notifyBtn = createNotifyButton(parsed.runId, runUrl);
 
-      // Insert button — try after status indicator, then after run link
-      const statusIndicator = row.querySelector(RUNNING_ROW_SELECTORS.join(','));
+      // Insert button after the run link
       const runLink = row.querySelector('a[href*="/actions/runs/"]');
-      if (statusIndicator) {
-        statusIndicator.closest('span, div, td')?.insertAdjacentElement('afterend', notifyBtn)
-          ?? statusIndicator.insertAdjacentElement('afterend', notifyBtn);
-      } else if (runLink) {
+      if (runLink) {
         runLink.insertAdjacentElement('afterend', notifyBtn);
       }
     });
