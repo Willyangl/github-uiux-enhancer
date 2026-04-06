@@ -43,7 +43,7 @@ jobs:
       - name: Create ZIP package
         run: |
           mkdir -p dist
-          zip -r "dist/github-enhancer-${{ steps.version.outputs.VERSION }}.zip" \
+          zip -r "dist/github-uiux-enhancer-${{ steps.version.outputs.VERSION }}.zip" \
             manifest.json \
             content.js \
             background.js \
@@ -56,7 +56,7 @@ jobs:
             icons/icon48.png \
             icons/icon128.png
           echo "Package contents:"
-          unzip -l "dist/github-enhancer-${{ steps.version.outputs.VERSION }}.zip"
+          unzip -l "dist/github-uiux-enhancer-${{ steps.version.outputs.VERSION }}.zip"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -66,12 +66,12 @@ jobs:
             ## GitHub UI/UX Enhancer v${{ steps.version.outputs.VERSION }}
 
             ### Installation
-            1. Download `github-enhancer-${{ steps.version.outputs.VERSION }}.zip`
+            1. Download `github-uiux-enhancer-${{ steps.version.outputs.VERSION }}.zip`
             2. Chrome: `chrome://extensions/` → Developer mode → Load unpacked
             3. Edge: `edge://extensions/` → Developer mode → Load unpacked
 
             ### Chrome Web Store
             To upload to Chrome Web Store, use the ZIP file attached below.
-          files: dist/github-enhancer-${{ steps.version.outputs.VERSION }}.zip
+          files: dist/github-uiux-enhancer-${{ steps.version.outputs.VERSION }}.zip
           draft: false
           prerelease: false
