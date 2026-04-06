@@ -203,6 +203,33 @@ function onClick(e) {
 document.addEventListener('toggle', onToggle, true);
 document.addEventListener('click', onClick, true);
 
+// ─── Detect "Run workflow" button click for auto-notify ─────────────────────
+// When the user clicks the "Run workflow" submit button, save a timestamp
+// so auto-notify only registers runs triggered by the user themselves.
+const AUTO_NOTIFY_WINDOW_MS = 120000; // 2 minutes window after click
+
+function onRunWorkflowClick(e) {
+  // GitHub's "Run workflow" submit button inside the dispatch form
+  const btn = e.target.closest(
+    'button.js-workflow-dispatch-submit, ' +
+    'form[action*="workflow_dispatch"] button[type="submit"], ' +
+    'div.js-workflow-dispatch button[type="submit"], ' +
+    '[data-action*="workflow-dispatch"] button'
+  );
+  // Also match by button text content as fallback
+  if (!btn && e.target.closest('button')) {
+    const text = (e.target.closest('button').textContent || '').trim().toLowerCase();
+    if (text === 'run workflow') {
+      safeStorageSet({ userTriggeredRunAt: Date.now() });
+      return;
+    }
+  }
+  if (btn) {
+    safeStorageSet({ userTriggeredRunAt: Date.now() });
+  }
+}
+document.addEventListener('click', onRunWorkflowClick, true);
+
 // ─── Feature 2 & 3: Full branch names + copy buttons ─────────────────────────
 
 /** Strict Actions page detection: /owner/repo/actions or /owner/repo/actions/... */
@@ -478,17 +505,21 @@ function enhanceWorkflowNotifications() {
     }
   });
 
-  safeStorageGet(['watchedRuns', 'githubToken'], (data) => {
+  safeStorageGet(['watchedRuns', 'githubToken', 'userTriggeredRunAt'], (data) => {
     if (!data) return;
     const watched = data.watchedRuns || {};
     let watchedUpdated = false;
+
+    // Auto-notify only if user recently clicked "Run workflow"
+    const triggeredAt = data.userTriggeredRunAt || 0;
+    const isUserTriggered = (Date.now() - triggeredAt) < AUTO_NOTIFY_WINDOW_MS;
 
     allRunRows.forEach(({ row, runUrl, parsed }, runId) => {
       if (row.querySelector('.gh-enhancer-notify-btn')) return;
       const running = isRowRunning(row);
       const isWatched = !!watched[runId];
 
-      if (featureToggles.autoNotify && running && !isWatched && data.githubToken) {
+      if (featureToggles.autoNotify && running && !isWatched && data.githubToken && isUserTriggered) {
         watched[runId] = {
           owner: parsed.owner, repo: parsed.repo, runId, runUrl, addedAt: Date.now(),
         };
@@ -505,6 +536,8 @@ function enhanceWorkflowNotifications() {
     if (watchedUpdated) {
       safeStorageSet({ watchedRuns: watched });
       safeSendMessage({ type: 'START_POLLING' });
+      // Clear the trigger marker after registering
+      safeStorageSet({ userTriggeredRunAt: 0 });
     }
   });
 }
@@ -521,17 +554,22 @@ function enhanceWorkflowRunDetailPage() {
   const isCompleted = completedKeywords.some(kw => pageText.includes(kw))
                    && !runningKeywords.some(kw => pageText.includes(kw));
 
-  safeStorageGet(['watchedRuns', 'githubToken'], (data) => {
+  safeStorageGet(['watchedRuns', 'githubToken', 'userTriggeredRunAt'], (data) => {
     if (!data) return;
     const watched = data.watchedRuns || {};
     const isWatched = !!watched[parsed.runId];
 
-    if (featureToggles.autoNotify && !isCompleted && !isWatched && data.githubToken) {
+    // Auto-notify only if user recently clicked "Run workflow"
+    const triggeredAt = data.userTriggeredRunAt || 0;
+    const isUserTriggered = (Date.now() - triggeredAt) < AUTO_NOTIFY_WINDOW_MS;
+
+    if (featureToggles.autoNotify && !isCompleted && !isWatched && data.githubToken && isUserTriggered) {
       watched[parsed.runId] = {
         owner: parsed.owner, repo: parsed.repo, runId: parsed.runId, runUrl: location.href, addedAt: Date.now(),
       };
       safeStorageSet({ watchedRuns: watched });
       safeSendMessage({ type: 'START_POLLING' });
+      safeStorageSet({ userTriggeredRunAt: 0 });
     }
 
     if (isCompleted) return;
@@ -732,6 +770,7 @@ document.addEventListener('pjax:end', guardedRunAll);
 function cleanupListeners() {
   document.removeEventListener('toggle', onToggle, true);
   document.removeEventListener('click', onClick, true);
+  document.removeEventListener('click', onRunWorkflowClick, true);
   document.removeEventListener('turbo:load', guardedRunAll);
   document.removeEventListener('turbo:render', guardedRunAll);
   document.removeEventListener('pjax:end', guardedRunAll);
