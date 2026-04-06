@@ -1,6 +1,6 @@
 # GitHub UI/UX Enhancer
 
-[![Test](https://github.com/Willyangl/github-enhancer/actions/workflows/test.yml/badge.svg)](https://github.com/Willyangl/github-enhancer/actions/workflows/test.yml)
+[![Test](https://github.com/Willyangl/github-uiux-enhancer/actions/workflows/test.yml/badge.svg)](https://github.com/Willyangl/github-uiux-enhancer/actions/workflows/test.yml)
 
 Microsoft Edge / Chrome 向けブラウザ拡張機能。GitHubの使い勝手を改善します。
 
