@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "GitHub Enhancer",
+  "name": "GitHub UI/UX Enhancer",
   "version": "1.0.0",
   "description": "Enhances GitHub UX: wider branch dropdowns, full branch names in Actions, copy buttons, and workflow completion notifications.",
   "permissions": ["storage", "notifications", "alarms", "clipboardWrite", "tabs"],

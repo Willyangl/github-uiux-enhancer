@@ -1,4 +1,4 @@
-# GitHub Enhancer
+# GitHub UI/UX Enhancer
 
 [![Test](https://github.com/Willyangl/github-enhancer/actions/workflows/test.yml/badge.svg)](https://github.com/Willyangl/github-enhancer/actions/workflows/test.yml)
 

@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - Background Service Worker
+ * GitHub UI/UX Enhancer - Background Service Worker
  *
  * Polls GitHub API for watched workflow runs and sends browser notifications
  * when a run completes.
@@ -125,7 +125,7 @@ async function pollWatchedRuns() {
         );
 
         if (!res.ok) {
-          console.warn(`GitHub Enhancer: API error for run ${run.runId}: ${res.status}`);
+          console.warn(`GitHub UI/UX Enhancer: API error for run ${run.runId}: ${res.status}`);
           return;
         }
 
@@ -140,7 +140,7 @@ async function pollWatchedRuns() {
           notifyContentScripts(run, name, head_branch, conclusion);
         }
       } catch (err) {
-        console.warn(`GitHub Enhancer: fetch error for run ${run.runId}`, err);
+        console.warn(`GitHub UI/UX Enhancer: fetch error for run ${run.runId}`, err);
       }
     })
   );

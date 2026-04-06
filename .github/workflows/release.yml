@@ -61,9 +61,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "GitHub Enhancer v${{ steps.version.outputs.VERSION }}"
+          name: "GitHub UI/UX Enhancer v${{ steps.version.outputs.VERSION }}"
           body: |
-            ## GitHub Enhancer v${{ steps.version.outputs.VERSION }}
+            ## GitHub UI/UX Enhancer v${{ steps.version.outputs.VERSION }}
 
             ### Installation
             1. Download `github-enhancer-${{ steps.version.outputs.VERSION }}.zip`

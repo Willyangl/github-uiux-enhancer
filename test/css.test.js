@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - CSS Tests
+ * GitHub UI/UX Enhancer - CSS Tests
  *
  * Verifies that styles.css contains the expected CSS rules for all features.
  *

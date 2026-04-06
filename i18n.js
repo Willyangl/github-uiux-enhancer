@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - i18n module
+ * GitHub UI/UX Enhancer - i18n module
  *
  * Provides translation support for ja, en, zh.
  * Usage:

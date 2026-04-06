@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - Popup UI Tests
+ * GitHub UI/UX Enhancer - Popup UI Tests
  *
  * Tests cover:
  *   - Feature toggle switches

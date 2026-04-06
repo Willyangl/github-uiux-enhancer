@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - Manifest Tests
+ * GitHub UI/UX Enhancer - Manifest Tests
  *
  * Verifies manifest.json is valid and contains required fields.
  *
@@ -26,7 +26,7 @@ describe('manifest.json', () => {
 
   test('TC-MF-03: has name, version, and description', () => {
     manifest = JSON.parse(manifestRaw);
-    expect(manifest.name).toBe('GitHub Enhancer');
+    expect(manifest.name).toBe('GitHub UI/UX Enhancer');
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(manifest.description).toBeTruthy();
   });

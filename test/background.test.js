@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - Background Service Worker Tests
+ * GitHub UI/UX Enhancer - Background Service Worker Tests
  *
  * Tests cover:
  *   - pollWatchedRuns: GitHub API polling, completed run detection

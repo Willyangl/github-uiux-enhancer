@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - Content Script Tests
+ * GitHub UI/UX Enhancer - Content Script Tests
  *
  * Tests cover:
  *   Feature 1: Branch dropdown widening (by character count)

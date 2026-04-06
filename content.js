@@ -1,5 +1,5 @@
 /**
- * GitHub Enhancer - Content Script
+ * GitHub UI/UX Enhancer - Content Script
  *
  * Feature 1: Widen branch dropdowns (configurable by character count)
  * Feature 2: Show full branch names in GitHub Actions workflow list
