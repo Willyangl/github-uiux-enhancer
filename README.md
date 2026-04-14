@@ -110,6 +110,46 @@ git push origin v1.1.0
 # → GitHub Actions: テスト → ZIP作成 → GitHubリリース作成
 ```
 
+## Privacy Policy
+
+GitHub UI/UX Enhancer is committed to protecting your privacy. This policy explains what data the extension accesses and how it is used.
+
+### Data Collected and Stored
+
+| Data | Purpose | Storage |
+|------|---------|---------|
+| GitHub Personal Access Token | Authenticate with GitHub API to check workflow run status | `chrome.storage.local` (browser only) |
+| User preferences (feature toggles, language, dropdown width) | Persist extension settings | `chrome.storage.local` (browser only) |
+| Watched workflow run IDs and URLs | Track workflows registered for completion notifications | `chrome.storage.local` (browser only) |
+
+### Data NOT Collected
+
+- No personal information is collected or transmitted to any third party.
+- No analytics, tracking, or telemetry data is gathered.
+- No data is stored on external servers.
+
+### External Requests
+
+The extension communicates **only** with the following services:
+
+- **github.com** — To inject UI enhancements into GitHub pages (content script).
+- **api.github.com** — To check workflow run status using the user's own Personal Access Token. This token is stored locally and is never shared.
+
+### User Control
+
+- All stored data remains in your browser's local storage and can be cleared at any time via `chrome://extensions/` → Extension Details → Clear data.
+- The GitHub Personal Access Token can be removed from the extension popup at any time.
+
+### Changes to This Policy
+
+If this policy changes, the updated version will be published in this repository.
+
+### Contact
+
+For questions or concerns, please open an issue at [GitHub Issues](https://github.com/Willyangl/github-uiux-enhancer/issues).
+
+---
+
 ## 注意事項
 
 - GitHub の UI は随時変更されるため、セレクタが一致しなくなる場合があります。その際は `content.js` のセレクタを調整してください。
