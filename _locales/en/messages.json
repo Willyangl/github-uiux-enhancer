@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "GitHub UI/UX Enhancer",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "Enhances GitHub UX: wider branch dropdowns, full branch names in Actions, copy buttons, and workflow completion notifications.",
+    "description": "Extension description"
+  },
+  "extensionShortDescription": {
+    "message": "Enhance GitHub UI: wider dropdowns, full branch names, copy buttons, workflow notifications.",
+    "description": "Short description"
+  }
+}

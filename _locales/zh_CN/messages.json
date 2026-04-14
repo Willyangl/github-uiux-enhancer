@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "GitHub UI/UX Enhancer",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "增强GitHub UI/UX：扩大分支下拉菜单、完整显示分支名、复制按钮、工作流完成通知。",
+    "description": "Extension description"
+  },
+  "extensionShortDescription": {
+    "message": "增强GitHub UI：扩大下拉菜单、完整分支名、复制按钮、工作流通知。",
+    "description": "Short description"
+  }
+}

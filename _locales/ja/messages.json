@@ -1,0 +1,14 @@
+{
+  "extensionName": {
+    "message": "GitHub UI/UX Enhancer",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "GitHubのUI/UXを改善: ブランチプルダウン幅拡大、ブランチ名全表示、コピーボタン、ワークフロー完了通知。",
+    "description": "Extension description"
+  },
+  "extensionShortDescription": {
+    "message": "GitHubのUI改善: プルダウン幅拡大、ブランチ名全表示、コピーボタン、WF完了通知。",
+    "description": "Short description"
+  }
+}
