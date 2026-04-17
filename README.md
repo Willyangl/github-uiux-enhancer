@@ -2,112 +2,120 @@
 
 [![Test](https://github.com/Willyangl/github-uiux-enhancer/actions/workflows/test.yml/badge.svg)](https://github.com/Willyangl/github-uiux-enhancer/actions/workflows/test.yml)
 
-Microsoft Edge / Chrome 向けブラウザ拡張機能。GitHubの使い勝手を改善します。
+A browser extension for Microsoft Edge / Chrome that improves the usability of GitHub.
 
-## 機能
+## Features
 
-### 1. ブランチ選択プルダウンの幅拡大
-リポジトリ画面・GitHub Actions の「Run workflow」モーダルなど、GitHub全体のブランチ選択プルダウンの幅を拡大します。表示文字数はポップアップから設定可能（20〜120文字、デフォルト50文字）。レガシーSelectMenuと最新Primer SelectPanel（React Portal）の両方に対応。
+### 1. Widen Branch Selection Dropdown
+Widens the branch selection dropdowns across GitHub, such as on the repository page and the "Run workflow" modal in GitHub Actions. The displayed character limit can be configured via the popup (20-120 characters, default is 50). Supports both the legacy SelectMenu and the latest Primer SelectPanel (React Portal).
 
 | Before | After |
 |--------|-------|
 | ![Before](docs/dropdown-before.png) | ![After](docs/dropdown-after.png) |
 
-### 2. Actionsワークフロー履歴のブランチ名を全表示 + コピーボタン
-GitHub Actions のワークフロー一覧で、ブランチ名が省略されて見えない問題を解消します。列幅に合わせて自動改行し、全文を表示します。ブランチ名の横にワンクリックコピーボタンも追加。
+### 2. Full Branch Name Display in Actions Workflow History + Copy Button
+Resolves the issue where branch names are truncated in the GitHub Actions workflow list. Automatically wraps the text according to the column width and displays the full branch name. A one-click copy button is also added next to the branch name.
 
-![ブランチ名全表示 + コピーボタン](docs/branch-name-copy.png)
+![Full branch name + Copy button](docs/branch-name-copy.png)
 
-### 3. ワークフロー完了通知
-- **一覧画面 / 詳細画面**: 実行中ワークフロー行に「通知」ボタンを表示。クリックで通知登録。
-- **自動通知登録**: ポップアップで有効化すると、実行中WFを自動的に通知登録。
-- **完了通知**: ページ内トースト通知（右下）+ OS デスクトップ通知の2段構え。
-- **通知クリック**: OS通知をクリックすると該当ワークフロー画面を開く。
-- **通知完了表示**: 完了後はボタンが「通知完了」（非活性・緑色）に変わる。
+### 3. Workflow Completion Notification
+- **List / Detail View**: Displays a "Notify" button on running workflow rows. Click to register for notifications.
+- **Auto-Notification Registration**: When enabled from the popup, currently running workflows are automatically registered for notifications.
+- **Completion Notification**: Two-step notification with an in-page toast notification (bottom right) + OS desktop notification.
+- **Notification Click**: Clicking the OS notification opens the corresponding workflow page.
+- **Completion Status**: Once completed, the button changes to "Notified" (disabled, green color).
 
-![ワークフロー通知ボタン](docs/notify-button.png)
+![Workflow notification button](docs/notify-button.png)
 
-![完了トースト通知](docs/notify-toast.png)
+![Completion toast notification](docs/notify-toast.png)
 
-### 4. 多言語対応
-日本語・英語・中国語をサポート。ポップアップのヘッダーから即座に切り替え可能。初回起動時はブラウザの言語設定から自動判定。
+### 4. Multilingual Support
+Supports Japanese, English, and Chinese. Can be switched instantly from the header of the popup. The initial language is automatically detected from the browser's language settings on first launch.
 
-### 5. 各機能の有効/無効スイッチ
-ポップアップから各機能を個別にON/OFF切り替え可能。設定は即座に反映されます。
+### 5. Enable/Disable Switches for Each Feature
+Each feature can be toggled ON/OFF individually from the popup. Settings are applied immediately.
 
-![拡張機能ポップアップUI](docs/popup-settings.png)
+![Extension popup UI](docs/popup-settings.png)
 
-## インストール方法
+## Installation
 
 ### Chrome Web Store
-（審査通過後にリンクを掲載予定）
+(Link will be posted after passing the review)
 
-### Edge（開発版）
+### Edge (Developer Mode)
 
-1. `edge://extensions/` を開く
-2. **「開発者モード」** をオンにする
-3. **「展開して読み込む」** をクリック
-4. このリポジトリのフォルダを選択
+1. Open `edge://extensions/`
+2. Enable **"Developer mode"**
+3. Click **"Load unpacked"**
+4. Select the folder of this repository
 
-### Chrome（開発版）
+### Chrome (Developer Mode)
 
-1. `chrome://extensions/` を開く
-2. **「デベロッパーモード」** をオンにする
-3. **「パッケージ化されていない拡張機能を読み込む」** をクリック
-4. このリポジトリのフォルダを選択
+1. Open `chrome://extensions/`
+2. Enable **"Developer mode"**
+3. Click **"Load unpacked"**
+4. Select the folder of this repository
 
-## 通知機能のセットアップ
+## Notification Setup
 
-ワークフロー完了通知を使うには **GitHub Personal Access Token** が必要です。
+A **GitHub Personal Access Token** is required to use workflow completion notifications.
 
-1. 拡張機能アイコンをクリックしてポップアップを開く
-2. [GitHub トークン発行ページ](https://github.com/settings/tokens/new?scopes=repo&description=GitHub+Enhancer) でトークンを作成（`repo` スコープが必要）
-3. トークンをポップアップの入力欄に貼り付けて「保存」
+1. Click the extension icon to open the popup.
+2. Create a token at the [GitHub Token Generation Page](https://github.com/settings/tokens/new?scopes=repo&description=GitHub+Enhancer) (requires the `repo` scope).
+3. Paste the token into the input field in the popup and click "Save".
 
-トークンはブラウザの `chrome.storage.local` に保存され、GitHub API へのリクエスト認証に使用されます。外部には送信されません。
+The token is saved in the browser's `chrome.storage.local` and is used to authenticate requests to the GitHub API. It is never sent externally.
 
-## ファイル構成
+## File Structure
 
 ```
 github-enhancer/
-├── manifest.json       # 拡張機能マニフェスト（Manifest V3）
-├── content.js          # コンテンツスクリプト（機能1〜3のDOM操作）
-├── background.js       # サービスワーカー（APIポーリング・通知）
-├── popup.html          # 設定ポップアップ UI
-├── popup.js            # 設定ポップアップ ロジック
-├── styles.css          # CSS（プルダウン幅・ブランチ名・ボタン・トースト）
-├── i18n.js             # 多言語モジュール（ja/en/zh）
+├── manifest.json       # Extension manifest (Manifest V3)
+├── package.json        # Node.js dependencies and scripts
+├── package-lock.json   # Lockfile for npm dependencies
+├── content.js          # Content script (DOM manipulation for features 1-3)
+├── background.js       # Service worker (API polling, notifications)
+├── popup.html          # Settings popup UI
+├── popup.js            # Settings popup logic
+├── styles.css          # CSS (dropdown width, branch name, buttons, toasts)
+├── i18n.js             # Internationalization module (ja/en/zh)
+├── generate-icons.js   # Script to generate extension icons
+├── _locales/           # Chrome extension localization directories
+│   ├── en/             # English locale
+│   ├── ja/             # Japanese locale
+│   └── zh_CN/          # Chinese locale
 ├── i18n/
-│   ├── ja.json         # 日本語翻訳
-│   ├── en.json         # 英語翻訳
-│   └── zh.json         # 中国語翻訳
+│   ├── ja.json         # Japanese translation
+│   ├── en.json         # English translation
+│   └── zh.json         # Chinese translation
 ├── icons/
 │   ├── icon16.png
 │   ├── icon48.png
 │   └── icon128.png
-├── docs/               # スクリーンショット
-├── test/               # Jest ユニットテスト（106テストケース）
+├── docs/               # Screenshots
+├── test/               # Jest unit tests (106 test cases)
 └── .github/workflows/
-    ├── test.yml        # テストCI（push to main, PR）
-    └── release.yml     # リリースCI（v*タグでZIP+GitHubリリース作成）
+    ├── test.yml        # Test CI (push to main, PR)
+    ├── release.yml     # Release CI (creates ZIP + GitHub Release on v* tag)
+    └── dummy-long.yml  # Dummy workflow for test runs
 ```
 
-## 開発
+## Development
 
 ```bash
-# 依存関係インストール
+# Install dependencies
 npm install
 
-# テスト実行
+# Run tests
 npm test
 ```
 
-### リリース
+### Release
 
 ```bash
 git tag v1.1.0
 git push origin v1.1.0
-# → GitHub Actions: テスト → ZIP作成 → GitHubリリース作成
+# -> GitHub Actions: Test -> Create ZIP -> Create GitHub Release
 ```
 
 ## Privacy Policy
@@ -150,8 +158,8 @@ For questions or concerns, please open an issue at [GitHub Issues](https://githu
 
 ---
 
-## 注意事項
+## Notes
 
-- GitHub の UI は随時変更されるため、セレクタが一致しなくなる場合があります。その際は `content.js` のセレクタを調整してください。
-- GitHub Personal Access Token はブラウザのローカルストレージに保存されます。共有PCでの使用には注意してください。
-- バックグラウンドワーカーは1分間隔でGitHub APIをポーリングします（監視対象がない場合は自動停止）。API Rate Limit（5,000回/時）にご注意ください。
+- Since GitHub's UI changes from time to time, selectors may stop matching. In that case, please adjust the selectors in `content.js`.
+- The GitHub Personal Access Token is saved in the browser's local storage. Please be careful when using a shared PC.
+- The background worker polls the GitHub API every minute (stops automatically if there are no targets to monitor). Please be aware of the API Rate Limit (5,000 requests/hour).
