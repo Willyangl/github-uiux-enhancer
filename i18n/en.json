@@ -6,6 +6,7 @@
     "charUnit": "chars",
     "fullBranchName": "Show full branch names in Actions workflow history",
     "copyButton": "Show copy button next to branch names",
+    "autoLoadJobSummary": "Auto-expand job summaries",
     "notifications": "Browser notification on workflow completion",
     "autoNotify": "Auto-register running workflows for notification",
     "settings": "Settings",

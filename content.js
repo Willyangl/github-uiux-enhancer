@@ -60,6 +60,7 @@ let featureToggles = {
   copyButton: true,
   notifications: true,
   autoNotify: false,
+  autoLoadJobSummary: true,
 };
 let dropdownCharCount = 50;
 let settingsReady = false;
@@ -393,6 +394,18 @@ function enhanceBranchNames() {
         el.insertAdjacentElement('afterend', copyBtn);
       }
     }
+  });
+}
+
+// ─── Feature 5: Auto-load job summaries ──────────────────────────────────────
+
+function autoLoadJobSummaries() {
+  if (!featureToggles.autoLoadJobSummary) return;
+
+  document.querySelectorAll('button[data-target="job-summary.loadButton"]').forEach(btn => {
+    if (btn.getAttribute(PROCESSED_ATTR)) return;
+    btn.setAttribute(PROCESSED_ATTR, 'summary-loaded');
+    btn.click();
   });
 }
 
@@ -731,6 +744,7 @@ function runAllEnhancements() {
   enhanceBranchNames();
   enhanceWorkflowNotifications();
   enhanceWorkflowRunDetailPage();
+  autoLoadJobSummaries();
 }
 
 let debounceTimer = null;

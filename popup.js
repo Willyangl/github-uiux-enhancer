@@ -14,6 +14,7 @@ const toggleIds = {
   widenDropdown: 'toggle-widenDropdown',
   fullBranchName: 'toggle-fullBranchName',
   copyButton: 'toggle-copyButton',
+  autoLoadJobSummary: 'toggle-autoLoadJobSummary',
   notifications: 'toggle-notifications',
   autoNotify: 'toggle-autoNotify',
 };
@@ -25,6 +26,7 @@ const DEFAULTS = {
     widenDropdown: true,
     fullBranchName: true,
     copyButton: true,
+    autoLoadJobSummary: true,
     notifications: true,
     autoNotify: false,
   },

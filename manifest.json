@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GitHub UI/UX Enhancer",
   "short_name": "GH Enhancer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Enhances GitHub UX: wider branch dropdowns, full branch names in Actions, copy buttons, and workflow completion notifications.",
   "default_locale": "en",
   "permissions": ["storage", "notifications", "alarms", "clipboardWrite", "tabs"],
