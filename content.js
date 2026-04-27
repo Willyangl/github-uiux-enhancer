@@ -61,6 +61,7 @@ let featureToggles = {
   notifications: true,
   autoNotify: false,
   autoLoadJobSummary: true,
+  expandRelativeTimes: true,
 };
 let dropdownCharCount = 50;
 let settingsReady = false;
@@ -330,14 +331,7 @@ function createCopyButton(branchName) {
       await navigator.clipboard.writeText(branchName);
       success = true;
     } catch {
-      const ta = document.createElement('textarea');
-      ta.value = branchName;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      success = document.execCommand('copy');
-      document.body.removeChild(ta);
+      // clipboard API unavailable
     }
 
     btn.classList.add('copied');
@@ -394,6 +388,36 @@ function enhanceBranchNames() {
         el.insertAdjacentElement('afterend', copyBtn);
       }
     }
+  });
+}
+
+// ─── Feature 6: Expand relative times to absolute date/time ──────────────────
+
+function formatAbsoluteTime(datetime) {
+  const date = new Date(datetime);
+  if (isNaN(date.getTime())) return null;
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function expandRelativeTimes() {
+  if (!featureToggles.expandRelativeTimes) return;
+
+  document.querySelectorAll('relative-time[datetime]').forEach(el => {
+    if (el.getAttribute(PROCESSED_ATTR) === 'time-expanded') return;
+    const datetime = el.getAttribute('datetime');
+    if (!datetime) return;
+
+    const formatted = formatAbsoluteTime(datetime);
+    if (!formatted) return;
+
+    const span = document.createElement('span');
+    span.className = 'gh-enhancer-abs-time';
+    span.textContent = formatted;
+    span.title = formatted;
+    el.insertAdjacentElement('afterend', span);
+    el.style.display = 'none';
+    el.setAttribute(PROCESSED_ATTR, 'time-expanded');
   });
 }
 
@@ -745,6 +769,7 @@ function runAllEnhancements() {
   enhanceWorkflowNotifications();
   enhanceWorkflowRunDetailPage();
   autoLoadJobSummaries();
+  expandRelativeTimes();
 }
 
 let debounceTimer = null;

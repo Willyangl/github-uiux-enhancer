@@ -15,6 +15,7 @@ const toggleIds = {
   fullBranchName: 'toggle-fullBranchName',
   copyButton: 'toggle-copyButton',
   autoLoadJobSummary: 'toggle-autoLoadJobSummary',
+  expandRelativeTimes: 'toggle-expandRelativeTimes',
   notifications: 'toggle-notifications',
   autoNotify: 'toggle-autoNotify',
 };
@@ -27,6 +28,7 @@ const DEFAULTS = {
     fullBranchName: true,
     copyButton: true,
     autoLoadJobSummary: true,
+    expandRelativeTimes: true,
     notifications: true,
     autoNotify: false,
   },
