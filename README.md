@@ -29,10 +29,20 @@ Resolves the issue where branch names are truncated in the GitHub Actions workfl
 
 ![Completion toast notification](docs/notify-toast.png)
 
-### 4. Multilingual Support
+### 4. Auto-Expand Job Summaries
+On GitHub Actions workflow run detail pages, automatically clicks all "Load summary" buttons so job summaries are expanded without any manual interaction.
+
+### 5. Absolute Date/Time Display
+Replaces relative time expressions (e.g. "last week", "1 minute ago") with absolute date/time in `YYYY/MM/DD HH:MM` format. Works across all GitHub pages, including the Actions workflow list and workflow run detail pages.
+
+| Before | After |
+|--------|-------|
+| last week / 1 minute ago | 2026/04/20 21:17 |
+
+### 6. Multilingual Support
 Supports Japanese, English, and Chinese. Can be switched instantly from the header of the popup. The initial language is automatically detected from the browser's language settings on first launch.
 
-### 5. Enable/Disable Switches for Each Feature
+### 7. Enable/Disable Switches for Each Feature
 Each feature can be toggled ON/OFF individually from the popup. Settings are applied immediately.
 
 ![Extension popup UI](docs/popup-settings.png)
@@ -73,7 +83,7 @@ github-enhancer/
 ├── manifest.json       # Extension manifest (Manifest V3)
 ├── package.json        # Node.js dependencies and scripts
 ├── package-lock.json   # Lockfile for npm dependencies
-├── content.js          # Content script (DOM manipulation for features 1-3)
+├── content.js          # Content script (DOM manipulation for features 1-5)
 ├── background.js       # Service worker (API polling, notifications)
 ├── popup.html          # Settings popup UI
 ├── popup.js            # Settings popup logic
