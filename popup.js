@@ -16,6 +16,7 @@ const toggleIds = {
   copyButton: 'toggle-copyButton',
   autoLoadJobSummary: 'toggle-autoLoadJobSummary',
   expandRelativeTimes: 'toggle-expandRelativeTimes',
+  autoExpandWorkflows: 'toggle-autoExpandWorkflows',
   notifications: 'toggle-notifications',
   autoNotify: 'toggle-autoNotify',
 };
@@ -29,6 +30,7 @@ const DEFAULTS = {
     copyButton: true,
     autoLoadJobSummary: true,
     expandRelativeTimes: true,
+    autoExpandWorkflows: true,
     notifications: true,
     autoNotify: false,
   },

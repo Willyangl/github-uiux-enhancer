@@ -8,6 +8,7 @@
     "copyButton": "在分支名旁显示复制按钮",
     "autoLoadJobSummary": "自动展开作业摘要",
     "expandRelativeTimes": "显示绝对日期时间（\"last week\" → 日期时间）",
+    "autoExpandWorkflows": "自动展开Actions侧边栏中的完整工作流列表",
     "notifications": "工作流完成时浏览器通知",
     "autoNotify": "自动注册运行中的工作流通知",
     "settings": "设置",

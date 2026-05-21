@@ -62,6 +62,7 @@ let featureToggles = {
   autoNotify: false,
   autoLoadJobSummary: true,
   expandRelativeTimes: true,
+  autoExpandWorkflows: true,
 };
 let dropdownCharCount = 50;
 let settingsReady = false;
@@ -762,6 +763,25 @@ function detectWorkflowCompletionOnPage() {
   }
 }
 
+// ─── Feature 7: Auto-expand workflow list ────────────────────────────────────
+
+function autoExpandWorkflows() {
+  if (!featureToggles.autoExpandWorkflows) return;
+  if (!isActionsPage()) return;
+
+  // GitHub reuses the same wrapper element and increments data-current-page on
+  // each AJAX load. We store the last-clicked page number in PROCESSED_ATTR so
+  // we click again whenever data-current-page advances (i.e. more pages remain).
+  document.querySelectorAll('[data-target="nav-list-group.showMoreItem"]').forEach(wrapper => {
+    const btn = wrapper.querySelector('button');
+    if (!btn) return;
+    const currentPage = wrapper.getAttribute('data-current-page') || '0';
+    if (wrapper.getAttribute(PROCESSED_ATTR) === currentPage) return;
+    wrapper.setAttribute(PROCESSED_ATTR, currentPage);
+    btn.click();
+  });
+}
+
 // ─── MutationObserver with debounce & filtering ─────────────────────────────
 
 function runAllEnhancements() {
@@ -770,16 +790,23 @@ function runAllEnhancements() {
   enhanceWorkflowRunDetailPage();
   autoLoadJobSummaries();
   expandRelativeTimes();
+  autoExpandWorkflows();
 }
 
 let debounceTimer = null;
 const observer = new MutationObserver((mutations) => {
   if (!isContextValid() || !settingsReady) return;
 
-  // Quick filter: skip if only text/attribute changes in irrelevant nodes
+  // Quick filter: skip if only text/attribute changes in irrelevant nodes.
+  // Also allow data-current-page attribute changes through so autoExpandWorkflows
+  // can re-check after GitHub increments the page counter post-AJAX load.
   let hasRelevantChange = false;
   for (const m of mutations) {
     if (m.addedNodes.length > 0 || m.removedNodes.length > 0) {
+      hasRelevantChange = true;
+      break;
+    }
+    if (m.type === 'attributes' && m.attributeName === 'data-current-page') {
       hasRelevantChange = true;
       break;
     }
@@ -794,7 +821,7 @@ const observer = new MutationObserver((mutations) => {
   }, DEBOUNCE_MS);
 });
 
-observer.observe(document.body, { childList: true, subtree: true });
+observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-current-page'] });
 
 function guardedRunAll() {
   if (!settingsReady) return;

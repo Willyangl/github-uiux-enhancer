@@ -39,10 +39,13 @@ Replaces relative time expressions (e.g. "last week", "1 minute ago") with absol
 |--------|-------|
 | last week / 1 minute ago | 2026/04/20 21:17 |
 
-### 6. Multilingual Support
+### 6. Auto-Expand Full Workflow List in Actions Sidebar
+GitHub Actions shows only a subset of workflows in the sidebar and hides the rest behind a "Show more workflows..." button. This extension automatically clicks through all pages so every workflow is always visible without any manual interaction.
+
+### 7. Multilingual Support
 Supports Japanese, English, and Chinese. Can be switched instantly from the header of the popup. The initial language is automatically detected from the browser's language settings on first launch.
 
-### 7. Enable/Disable Switches for Each Feature
+### 8. Enable/Disable Switches for Each Feature
 Each feature can be toggled ON/OFF individually from the popup. Settings are applied immediately.
 
 ![Extension popup UI](docs/popup-settings.png)
@@ -83,7 +86,7 @@ github-enhancer/
 ├── manifest.json       # Extension manifest (Manifest V3)
 ├── package.json        # Node.js dependencies and scripts
 ├── package-lock.json   # Lockfile for npm dependencies
-├── content.js          # Content script (DOM manipulation for features 1-5)
+├── content.js          # Content script (DOM manipulation for features 1-6)
 ├── background.js       # Service worker (API polling, notifications)
 ├── popup.html          # Settings popup UI
 ├── popup.js            # Settings popup logic

@@ -8,6 +8,7 @@
     "copyButton": "ブランチ名横にコピーボタンを表示",
     "autoLoadJobSummary": "ジョブサマリーを自動展開",
     "expandRelativeTimes": "日時を絶対表示（\"last week\" → 日付時刻）",
+    "autoExpandWorkflows": "Actionsサイドバーのワークフロー一覧を全表示",
     "notifications": "ワークフロー完了時にブラウザ通知",
     "autoNotify": "実行中WFを自動的に通知登録する",
     "settings": "設定",
