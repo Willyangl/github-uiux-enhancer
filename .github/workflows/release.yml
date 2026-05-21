@@ -73,7 +73,18 @@ jobs:
             3. Edge: `edge://extensions/` → Developer mode → Load unpacked
 
             ### Chrome Web Store
-            To upload to Chrome Web Store, use the ZIP file attached below.
+            Available on the Chrome Web Store (update may take a few hours to be reviewed).
           files: dist/github-uiux-enhancer-${{ steps.version.outputs.VERSION }}.zip
           draft: false
           prerelease: false
+
+      - name: Publish to Chrome Web Store
+        run: |
+          npm install -g chrome-webstore-upload-cli
+          chrome-webstore-upload upload --source "dist/github-uiux-enhancer-${{ steps.version.outputs.VERSION }}.zip"
+          chrome-webstore-upload publish
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
