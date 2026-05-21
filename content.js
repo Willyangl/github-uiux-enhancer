@@ -62,6 +62,7 @@ let featureToggles = {
   autoNotify: false,
   autoLoadJobSummary: true,
   expandRelativeTimes: true,
+  autoExpandWorkflows: true,
 };
 let dropdownCharCount = 50;
 let settingsReady = false;
@@ -762,6 +763,57 @@ function detectWorkflowCompletionOnPage() {
   }
 }
 
+// ─── Feature 7: Auto-expand workflow list ────────────────────────────────────
+
+// Module-level state avoids relying on PROCESSED_ATTR surviving page updates.
+// retryTimer ensures we re-check after a click even if MutationObserver misses
+// the data-current-page increment (which GitHub may do synchronously, before
+// new items are added to the DOM).
+const workflowExpandState = { clickPage: null, clickTime: 0, retryTimer: null };
+const EXPAND_RETRY_MS = 3000;
+
+function autoExpandWorkflows() {
+  if (!featureToggles.autoExpandWorkflows || !isActionsPage()) {
+    if (workflowExpandState.retryTimer) {
+      clearTimeout(workflowExpandState.retryTimer);
+      workflowExpandState.retryTimer = null;
+    }
+    return;
+  }
+
+  if (workflowExpandState.retryTimer) {
+    clearTimeout(workflowExpandState.retryTimer);
+    workflowExpandState.retryTimer = null;
+  }
+
+  const wrapper = document.querySelector('[data-target="nav-list-group.showMoreItem"]');
+  if (!wrapper) return; // All pages loaded — no retry needed
+
+  const btn = wrapper.querySelector('button');
+  if (!btn) return;
+
+  const currentPage = wrapper.getAttribute('data-current-page') || '0';
+  const totalPages = wrapper.getAttribute('data-total-pages') || '0';
+  if (totalPages !== '0' && parseInt(currentPage) >= parseInt(totalPages)) return;
+
+  const now = Date.now();
+  const pageAdvanced = currentPage !== workflowExpandState.clickPage;
+  const timedOut = (now - workflowExpandState.clickTime) >= EXPAND_RETRY_MS;
+
+  if (pageAdvanced || timedOut) {
+    workflowExpandState.clickPage = currentPage;
+    workflowExpandState.clickTime = now;
+    btn.click();
+  }
+
+  // Always schedule a follow-up: if the MutationObserver doesn't catch the
+  // next data-current-page update, this timer will re-trigger the check.
+  workflowExpandState.retryTimer = setTimeout(() => {
+    workflowExpandState.retryTimer = null;
+    autoExpandWorkflows();
+  }, EXPAND_RETRY_MS);
+}
+
 // ─── MutationObserver with debounce & filtering ─────────────────────────────
 
 function runAllEnhancements() {
@@ -770,6 +822,7 @@ function runAllEnhancements() {
   enhanceWorkflowRunDetailPage();
   autoLoadJobSummaries();
   expandRelativeTimes();
+  autoExpandWorkflows();
 }
 
 let debounceTimer = null;
@@ -798,7 +851,13 @@ observer.observe(document.body, { childList: true, subtree: true });
 
 function guardedRunAll() {
   if (!settingsReady) return;
-  lastKnownDetailStatus = null; // Reset on page navigation
+  lastKnownDetailStatus = null;
+  workflowExpandState.clickPage = null;
+  workflowExpandState.clickTime = 0;
+  if (workflowExpandState.retryTimer) {
+    clearTimeout(workflowExpandState.retryTimer);
+    workflowExpandState.retryTimer = null;
+  }
   runAllEnhancements();
 }
 document.addEventListener('turbo:load', guardedRunAll);

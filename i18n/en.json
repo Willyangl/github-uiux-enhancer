@@ -8,6 +8,7 @@
     "copyButton": "Show copy button next to branch names",
     "autoLoadJobSummary": "Auto-expand job summaries",
     "expandRelativeTimes": "Show absolute date/time (\"last week\" → date & time)",
+    "autoExpandWorkflows": "Auto-expand full workflow list in Actions sidebar",
     "notifications": "Browser notification on workflow completion",
     "autoNotify": "Auto-register running workflows for notification",
     "settings": "Settings",
