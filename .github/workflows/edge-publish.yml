@@ -1,0 +1,29 @@
+name: Publish to Edge Add-ons
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 1.0.3)'
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download ZIP from GitHub Release
+        run: |
+          gh release download "v${{ github.event.inputs.version }}" \
+            --pattern "github-uiux-enhancer-${{ github.event.inputs.version }}.zip" \
+            --dir dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+      - name: Publish to Edge Add-ons
+        uses: wdzeng/edge-addon@v2
+        with:
+          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+          zip-path: dist/github-uiux-enhancer-${{ github.event.inputs.version }}.zip
+          client-id: ${{ secrets.EDGE_CLIENT_ID }}
+          api-key: ${{ secrets.EDGE_API_KEY }}
